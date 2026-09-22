@@ -1,0 +1,10 @@
+services:
+  router:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      SYSTEM_ONE_ENVIRONMENT: development
+      SYSTEM_ONE_LOG_LEVEL: INFO
+      SYSTEM_ONE_HOST: 0.0.0.0
+      SYSTEM_ONE_PORT: 8000
