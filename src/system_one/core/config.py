@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_prefix="SYSTEM_ONE_",
         extra="ignore",
+        populate_by_name=True,
     )
 
     environment: str = "development"
@@ -19,6 +21,33 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     api_key: str | None = None
+    openrouter_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("OPENROUTER_API_KEY", "SYSTEM_ONE_OPENROUTER_API_KEY"),
+    )
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        validation_alias=AliasChoices("OPENROUTER_BASE_URL", "SYSTEM_ONE_OPENROUTER_BASE_URL"),
+    )
+    openrouter_timeout_seconds: float = Field(
+        default=30,
+        gt=0,
+        validation_alias=AliasChoices(
+            "OPENROUTER_TIMEOUT_SECONDS",
+            "SYSTEM_ONE_OPENROUTER_TIMEOUT_SECONDS",
+        ),
+    )
+    openrouter_http_referer: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "OPENROUTER_HTTP_REFERER",
+            "SYSTEM_ONE_OPENROUTER_HTTP_REFERER",
+        ),
+    )
+    openrouter_app_title: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("OPENROUTER_APP_TITLE", "SYSTEM_ONE_OPENROUTER_APP_TITLE"),
+    )
 
 
 @lru_cache

@@ -2,6 +2,8 @@
 
 from fastapi import FastAPI
 
+from system_one.api.openrouter import OpenRouterClient
+from system_one.api.routes import router
 from system_one.core.config import get_settings
 
 
@@ -13,6 +15,8 @@ def create_app() -> FastAPI:
         version="0.1.0",
         description="An OpenRouter-compatible LLM routing gateway.",
     )
+    application.state.openrouter_client = OpenRouterClient(settings)
+    application.include_router(router)
 
     @application.get("/health", tags=["system"])
     async def health() -> dict[str, str]:
