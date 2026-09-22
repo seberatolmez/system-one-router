@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     host: str = "0.0.0.0"
     port: int = 8000
+    api_key: str | None = None
 
 
 @lru_cache
