@@ -1,4 +1,4 @@
-"""Integration tests for the mocked OpenRouter passthrough flow."""
+"""Integration tests for the gateway flow through the provider abstraction."""
 
 import json
 
@@ -7,8 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from system_one.api.app import app
-from system_one.api.openrouter import OpenRouterClient
 from system_one.core.config import Settings, get_settings
+from system_one.providers.openrouter import OpenRouterProvider
 
 
 @pytest.fixture(autouse=True)
@@ -24,7 +24,7 @@ def make_client(handler: httpx.MockTransport) -> TestClient:
         api_key="local-dev-key",
         openrouter_api_key="openrouter-test-key",
     )
-    app.state.openrouter_client = OpenRouterClient(settings, transport=handler)
+    app.state.provider = OpenRouterProvider(settings, transport=handler)
     return TestClient(app)
 
 
