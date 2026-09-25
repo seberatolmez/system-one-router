@@ -48,6 +48,26 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("OPENROUTER_APP_TITLE", "SYSTEM_ONE_OPENROUTER_APP_TITLE"),
     )
+    jev_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("JEV_ENABLED", "SYSTEM_ONE_JEV_ENABLED"),
+    )
+    jev_model: str = Field(
+        default="~typesafe/jev-latest",
+        validation_alias=AliasChoices("JEV_MODEL", "SYSTEM_ONE_JEV_MODEL"),
+    )
+    jev_base_url: str = Field(
+        default="https://openrouter.ai/api/alpha",
+        validation_alias=AliasChoices("JEV_BASE_URL", "SYSTEM_ONE_JEV_BASE_URL"),
+    )
+    jev_timeout_seconds: float = Field(
+        default=10,
+        gt=0,
+        validation_alias=AliasChoices(
+            "JEV_TIMEOUT_SECONDS",
+            "SYSTEM_ONE_JEV_TIMEOUT_SECONDS",
+        ),
+    )
 
 
 @lru_cache
