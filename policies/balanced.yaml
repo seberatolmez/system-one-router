@@ -1,0 +1,14 @@
+policy:
+  confidence_threshold: 0.85
+  # The fallback is balanced unless explicitly configured otherwise.
+  # Ranges are [min_complexity, max_complexity), except the last includes 5.0.
+  tiers:
+    fast:
+      min_complexity: 1.0
+      max_complexity: 2.5
+    balanced:
+      min_complexity: 2.5
+      max_complexity: 4.5
+    reasoning:
+      min_complexity: 4.5
+      max_complexity: 5.0
