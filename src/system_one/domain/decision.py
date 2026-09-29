@@ -1,6 +1,7 @@
 """Typed routing decision contracts shared across routing layers."""
 
 from dataclasses import dataclass
+from typing import Literal
 
 from system_one.domain.completions import CompletionMessage
 
@@ -46,3 +47,18 @@ class Decision:
             raise ValueError("latency_requirement must be within 1.0 and 5.0")
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError("confidence must be within 0.0 and 1.0")
+
+
+RoutingTier = Literal["fast", "balanced", "reasoning"]
+
+
+@dataclass(frozen=True)
+class RoutingResult:
+    """Tier-level policy result, intentionally independent of model selection."""
+
+    tier: RoutingTier
+
+    def __post_init__(self) -> None:
+        """Reject unknown tiers even when values bypass static type checking."""
+        if self.tier not in ("fast", "balanced", "reasoning"):
+            raise ValueError(f"unsupported routing tier: {self.tier!r}")

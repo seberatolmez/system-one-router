@@ -15,6 +15,7 @@ JEV_ENV_NAMES = (
     "SYSTEM_ONE_JEV_BASE_URL",
     "SYSTEM_ONE_JEV_TIMEOUT_SECONDS",
 )
+POLICY_ENV_NAMES = ("POLICY_FILE", "SYSTEM_ONE_POLICY_FILE")
 
 
 def test_jev_settings_have_documented_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -45,3 +46,21 @@ def test_jev_settings_read_short_env_aliases(monkeypatch: pytest.MonkeyPatch) ->
 def test_jev_timeout_must_be_positive() -> None:
     with pytest.raises(ValidationError, match="greater than 0"):
         Settings(jev_timeout_seconds=0)
+
+
+def test_policy_file_setting_defaults_to_balanced_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in POLICY_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+
+    assert Settings().policy_file == "policies/balanced.yaml"
+
+
+@pytest.mark.parametrize("env_name", POLICY_ENV_NAMES)
+def test_policy_file_setting_reads_environment_aliases(
+    monkeypatch: pytest.MonkeyPatch, env_name: str
+) -> None:
+    monkeypatch.setenv(env_name, "custom/policy.yaml")
+
+    assert Settings().policy_file == "custom/policy.yaml"

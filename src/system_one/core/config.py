@@ -68,6 +68,11 @@ class Settings(BaseSettings):
             "SYSTEM_ONE_JEV_TIMEOUT_SECONDS",
         ),
     )
+    policy_file: str = Field(
+        default="policies/balanced.yaml",
+        min_length=1,
+        validation_alias=AliasChoices("POLICY_FILE", "SYSTEM_ONE_POLICY_FILE"),
+    )
 
 
 @lru_cache
