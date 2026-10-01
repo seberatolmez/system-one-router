@@ -5,17 +5,39 @@ from fastapi import FastAPI
 from system_one.api.routes import router
 from system_one.core.config import get_settings
 from system_one.providers.openrouter import OpenRouterProvider
+from system_one.routing.decision import DecisionEngine, InternalDecisionEngine, JevDecisionEngine
+from system_one.routing.orchestrator import RoutingOrchestrator
+from system_one.routing.policy import DeterministicPolicyEngine, load_policy_config
+from system_one.routing.registry import load_model_registry
 
 
 def create_app() -> FastAPI:
-    """Create the System One Router HTTP application."""
+    """Create the System One Router HTTP application.
+
+    Configuration is validated eagerly: an invalid policy or model registry
+    fails fast at startup instead of producing per-request failures.
+    """
     settings = get_settings()
     application = FastAPI(
         title="System One Router",
         version="0.1.0",
         description="An OpenRouter-compatible LLM routing gateway.",
     )
-    application.state.provider = OpenRouterProvider(settings)
+    provider = OpenRouterProvider(settings)
+    policy_engine = DeterministicPolicyEngine(load_policy_config(settings.policy_file))
+    model_registry = load_model_registry(settings.models_file)
+    decision_engine: DecisionEngine = (
+        JevDecisionEngine(settings)
+        if settings.jev_enabled
+        else InternalDecisionEngine()
+    )
+    application.state.provider = provider
+    application.state.orchestrator = RoutingOrchestrator(
+        decision_engine=decision_engine,
+        policy_engine=policy_engine,
+        model_registry=model_registry,
+        provider=provider,
+    )
     application.include_router(router)
 
     @application.get("/health", tags=["system"])

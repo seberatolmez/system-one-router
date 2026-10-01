@@ -9,6 +9,10 @@ from fastapi.testclient import TestClient
 from system_one.api.app import app
 from system_one.core.config import Settings, get_settings
 from system_one.providers.openrouter import OpenRouterProvider
+from system_one.routing.decision import InternalDecisionEngine
+from system_one.routing.orchestrator import RoutingOrchestrator
+from system_one.routing.policy import DeterministicPolicyEngine, load_policy_config
+from system_one.routing.registry import load_model_registry
 
 
 @pytest.fixture(autouse=True)
@@ -24,11 +28,18 @@ def make_client(handler: httpx.MockTransport) -> TestClient:
         api_key="local-dev-key",
         openrouter_api_key="openrouter-test-key",
     )
-    app.state.provider = OpenRouterProvider(settings, transport=handler)
+    provider = OpenRouterProvider(settings, transport=handler)
+    app.state.provider = provider
+    app.state.orchestrator = RoutingOrchestrator(
+        decision_engine=InternalDecisionEngine(),
+        policy_engine=DeterministicPolicyEngine(load_policy_config("policies/balanced.yaml")),
+        model_registry=load_model_registry("registry/models.yaml"),
+        provider=provider,
+    )
     return TestClient(app)
 
 
-def test_models_forward_upstream_response() -> None:
+def test_models_forward_upstream_response_with_virtual_models() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "GET"
         assert request.url.path == "/api/v1/models"
@@ -42,7 +53,18 @@ def test_models_forward_upstream_response() -> None:
         )
 
     assert response.status_code == 200
-    assert response.json() == {"object": "list", "data": []}
+    assert response.json() == {
+        "object": "list",
+        "data": [
+            {"id": name, "object": "model", "owned_by": "system-one-router"}
+            for name in (
+                "system-one/auto",
+                "system-one/fast",
+                "system-one/balanced",
+                "system-one/reasoning",
+            )
+        ],
+    }
 
 
 def test_chat_completion_forwards_request_and_response() -> None:
@@ -87,12 +109,12 @@ def test_gateway_rejects_missing_api_key() -> None:
 
 
 @pytest.mark.parametrize(
-    ("model", "expected_status", "message"),
+    ("model", "expected_message"),
     [
-        ("system-one/auto", 400, "Automatic routing models are not enabled yet"),
+        ("system-one/unknown-model", "Unsupported virtual model: 'system-one/unknown-model'"),
     ],
 )
-def test_gateway_rejects_routing_models(model: str, expected_status: int, message: str) -> None:
+def test_gateway_rejects_unknown_virtual_models(model: str, expected_message: str) -> None:
     with make_client(httpx.MockTransport(lambda _: httpx.Response(500))) as client:
         response = client.post(
             "/api/v1/chat/completions",
@@ -100,8 +122,26 @@ def test_gateway_rejects_routing_models(model: str, expected_status: int, messag
             json={"model": model, "messages": [{"role": "user", "content": "Hello"}]},
         )
 
-    assert response.status_code == expected_status
-    assert response.json()["error"]["message"] == message
+    assert response.status_code == 400
+    assert response.json()["error"]["message"] == expected_message
+
+
+def test_gateway_routes_auto_through_default_wiring_with_fallback_engine() -> None:
+    """With Jev disabled, auto still resolves through policy + registry."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert json.loads(request.content)["model"] == "anthropic/claude-3.5-haiku"
+        return httpx.Response(200, json={"id": "chatcmpl_fallback", "model": "routed"})
+
+    with make_client(httpx.MockTransport(handler)) as client:
+        response = client.post(
+            "/api/v1/chat/completions",
+            headers={"Authorization": "Bearer local-dev-key"},
+            json={"model": "system-one/auto", "messages": [{"role": "user", "content": "Hello"}]},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "chatcmpl_fallback"
 
 
 def test_gateway_rejects_streaming_until_streaming_milestone() -> None:

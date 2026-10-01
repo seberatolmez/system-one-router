@@ -17,6 +17,11 @@ from system_one.providers.errors import (
     ProviderConfigurationError,
     ProviderUnavailableError,
 )
+from system_one.routing.orchestrator import (
+    VIRTUAL_MODEL_NAMES,
+    RoutingOrchestrator,
+    UnknownVirtualModelError,
+)
 
 router = APIRouter(prefix="/api/v1")
 Authenticated = Annotated[None, Depends(require_api_key)]
@@ -39,6 +44,11 @@ def get_provider(request: Request) -> LLMProvider:
     return cast(LLMProvider, request.app.state.provider)
 
 
+def get_orchestrator(request: Request) -> RoutingOrchestrator:
+    """Resolve the application-scoped routing orchestrator."""
+    return cast(RoutingOrchestrator, request.app.state.orchestrator)
+
+
 def error_response(
     status_code: int,
     message: str,
@@ -54,6 +64,19 @@ def error_response(
 def passthrough_response(response: CompletionResponse) -> JSONResponse:
     """Return the upstream body with the upstream status code."""
     return JSONResponse(status_code=response.status_code, content=response.body)
+
+
+def merged_models_response(response: CompletionResponse) -> JSONResponse:
+    """Return the upstream model catalog with virtual routing models added."""
+    body = dict(response.body)
+    virtual_entries: list[dict[str, object]] = [
+        {"id": model_name, "object": "model", "owned_by": "system-one-router"}
+        for model_name in VIRTUAL_MODEL_NAMES
+    ]
+    data = body.get("data")
+    if response.status_code == 200 and isinstance(data, list):
+        body["data"] = virtual_entries + list(data)
+    return JSONResponse(status_code=response.status_code, content=body)
 
 
 def to_completion_request(request: ChatCompletionRequest) -> CompletionRequest:
@@ -89,30 +112,27 @@ async def list_models(
         )
     except ProviderUnavailableError as error:
         return error_response(status.HTTP_502_BAD_GATEWAY, str(error), "upstream_error")
-
-    return passthrough_response(response)
+    return merged_models_response(response)
 
 
 @router.post("/chat/completions")
 async def chat_completions(
     request: ChatCompletionRequest,
     _: Authenticated,
-    provider: Annotated[LLMProvider, Depends(get_provider)],
+    orchestrator: Annotated[RoutingOrchestrator, Depends(get_orchestrator)],
 ) -> JSONResponse:
-    """Forward an explicit model completion request through the provider."""
-    if request.model.startswith("system-one/"):
-        return error_response(
-            status.HTTP_400_BAD_REQUEST,
-            "Automatic routing models are not enabled yet",
-        )
+    """Execute the routing lifecycle; explicit models pass through unchanged."""
     if request.stream:
         return error_response(
             status.HTTP_501_NOT_IMPLEMENTED,
             "Streaming is not enabled yet",
         )
 
+    domain_request = to_completion_request(request)
     try:
-        response = await provider.chat(to_completion_request(request))
+        response = await orchestrator.route(domain_request)
+    except UnknownVirtualModelError as error:
+        return error_response(status.HTTP_400_BAD_REQUEST, str(error))
     except ProviderConfigurationError as error:
         return error_response(
             status.HTTP_503_SERVICE_UNAVAILABLE,
