@@ -1,0 +1,36 @@
+# Default System One Router model pool.
+# Tiers map to Jev routing tiers; registration order is the deterministic
+# tie-break when a tier contains multiple profiles.
+models:
+  fast:
+    - id: google/gemini-2.5-flash
+      provider: openrouter
+      capabilities:
+        reasoning: 2
+        coding: 3
+        vision: true
+      cost:
+        input_per_million: 0.3
+        output_per_million: 2.5
+
+  balanced:
+    - id: anthropic/claude-3.5-haiku
+      provider: openrouter
+      capabilities:
+        reasoning: 3
+        coding: 4
+        vision: false
+      cost:
+        input_per_million: 0.8
+        output_per_million: 4.0
+
+  reasoning:
+    - id: anthropic/claude-sonnet-4
+      provider: openrouter
+      capabilities:
+        reasoning: 5
+        coding: 5
+        vision: false
+      cost:
+        input_per_million: 3.0
+        output_per_million: 15.0
