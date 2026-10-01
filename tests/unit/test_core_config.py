@@ -16,6 +16,7 @@ JEV_ENV_NAMES = (
     "SYSTEM_ONE_JEV_TIMEOUT_SECONDS",
 )
 POLICY_ENV_NAMES = ("POLICY_FILE", "SYSTEM_ONE_POLICY_FILE")
+MODELS_ENV_NAMES = ("MODELS_FILE", "SYSTEM_ONE_MODELS_FILE")
 
 
 def test_jev_settings_have_documented_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -64,3 +65,21 @@ def test_policy_file_setting_reads_environment_aliases(
     monkeypatch.setenv(env_name, "custom/policy.yaml")
 
     assert Settings().policy_file == "custom/policy.yaml"
+
+
+def test_models_file_setting_defaults_to_default_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in MODELS_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+
+    assert Settings().models_file == "registry/models.yaml"
+
+
+@pytest.mark.parametrize("env_name", MODELS_ENV_NAMES)
+def test_models_file_setting_reads_environment_aliases(
+    monkeypatch: pytest.MonkeyPatch, env_name: str
+) -> None:
+    monkeypatch.setenv(env_name, "custom/models.yaml")
+
+    assert Settings().models_file == "custom/models.yaml"

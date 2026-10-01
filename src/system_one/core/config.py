@@ -73,6 +73,11 @@ class Settings(BaseSettings):
         min_length=1,
         validation_alias=AliasChoices("POLICY_FILE", "SYSTEM_ONE_POLICY_FILE"),
     )
+    models_file: str = Field(
+        default="registry/models.yaml",
+        min_length=1,
+        validation_alias=AliasChoices("MODELS_FILE", "SYSTEM_ONE_MODELS_FILE"),
+    )
 
 
 @lru_cache

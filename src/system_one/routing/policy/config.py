@@ -4,46 +4,15 @@ from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-from yaml.constructor import ConstructorError  # type: ignore[import-untyped]
-from yaml.nodes import MappingNode  # type: ignore[import-untyped]
 
 from system_one.domain.decision import RoutingTier
+from system_one.routing.yaml_safe import load_unique_keys_yaml
 
 _TIER_ORDER: tuple[RoutingTier, ...] = ("fast", "balanced", "reasoning")
 
 
 class PolicyConfigurationError(ValueError):
     """Raised when the policy file cannot be loaded or validated."""
-
-
-class _UniqueKeySafeLoader(yaml.SafeLoader):  # type: ignore[misc]
-    """Safe YAML loader that rejects duplicate mapping keys."""
-
-    def construct_mapping(
-        self, node: MappingNode, deep: bool = False
-    ) -> dict[object, object]:
-        self.flatten_mapping(node)
-        mapping: dict[object, object] = {}
-        for key_node, value_node in node.value:
-            key = self.construct_object(key_node, deep=deep)
-            try:
-                duplicate = key in mapping
-            except TypeError as error:
-                raise ConstructorError(
-                    "while constructing a mapping",
-                    node.start_mark,
-                    "found an unhashable key",
-                    key_node.start_mark,
-                ) from error
-            if duplicate:
-                raise ConstructorError(
-                    "while constructing a mapping",
-                    node.start_mark,
-                    f"found duplicate key {key!r}",
-                    key_node.start_mark,
-                )
-            mapping[key] = self.construct_object(value_node, deep=deep)
-        return mapping
 
 
 class ComplexityRange(BaseModel):
@@ -111,7 +80,7 @@ def load_policy_config(path: str | Path) -> PolicyConfig:
     policy_path = Path(path)
     try:
         with policy_path.open("r", encoding="utf-8") as policy_stream:
-            document = yaml.load(policy_stream, Loader=_UniqueKeySafeLoader)
+            document = load_unique_keys_yaml(policy_stream)
     except FileNotFoundError as error:
         raise PolicyConfigurationError(f"Policy file not found: {policy_path}") from error
     except (OSError, UnicodeError) as error:

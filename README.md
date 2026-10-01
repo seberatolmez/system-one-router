@@ -39,10 +39,13 @@ GET  http://localhost:8000/api/v1/models
 POST http://localhost:8000/api/v1/chat/completions
 ```
 
-Milestone 1 accepts explicit OpenRouter model IDs such as
-`openai/gpt-4o-mini`. Requests using `system-one/auto`,
-`system-one/fast`, `system-one/balanced`, or `system-one/reasoning` are rejected
-until automatic routing is implemented. Streaming requests are also deferred.
+The gateway accepts explicit OpenRouter model IDs such as `openai/gpt-4o-mini`
+passed through to OpenRouter, and virtual routing models `system-one/auto`,
+`system-one/fast`, `system-one/balanced`, and `system-one/reasoning`. Virtual
+models resolve through the Jev decision engine, the deterministic policy engine,
+and the model registry (`registry/models.yaml`) to a concrete OpenRouter model;
+`system-one/fast|balanced|reasoning` map directly to their tier without a
+decision-engine call. Streaming requests are deferred to a later milestone.
 
 Run the example request after starting the service:
 
