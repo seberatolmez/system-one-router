@@ -100,6 +100,7 @@ def make_orchestrator(
         policy_engine=DeterministicPolicyEngine(load_policy_config("policies/balanced.yaml")),
         model_registry=ModelRegistry(make_profiles()),
         provider=provider,
+        policy_name="balanced",
     )
     return orchestrator, provider
 
@@ -117,10 +118,21 @@ async def test_auto_reroutes_full_decision_policy_registry_chain() -> None:
     engine = FakeDecisionEngine(CONFIDENT_DECISION)
     orchestrator, provider = make_orchestrator(engine)
 
-    response = await orchestrator.route(make_request("system-one/auto"))
+    outcome = await orchestrator.route(make_request("system-one/auto"))
 
-    assert response.status_code == 200
-    assert response.body == {"id": "chatcmpl_fake", "model": "vendor/balanced-primary"}
+    assert outcome.response.status_code == 200
+    assert outcome.response.body == {
+        "id": "chatcmpl_fake",
+        "model": "vendor/balanced-primary",
+    }
+    assert outcome.model_requested == "system-one/auto"
+    assert outcome.model_selected == "vendor/balanced-primary"
+    assert outcome.route_type == "auto"
+    assert outcome.tier == "balanced"
+    assert outcome.decision == CONFIDENT_DECISION
+    assert outcome.policy_name == "balanced"
+    assert outcome.decision_latency_ms is not None
+    assert outcome.routing_latency_ms >= outcome.decision_latency_ms
     assert len(engine.requests) == 1
     assert engine.requests[0].model == "system-one/auto"
     assert engine.requests[0].messages[0].content == "Route this for me."
@@ -144,11 +156,16 @@ async def test_tier_virtual_models_bypass_the_decision_engine(
     engine = FakeDecisionEngine(CONFIDENT_DECISION)
     orchestrator, provider = make_orchestrator(engine)
 
-    response = await orchestrator.route(make_request(virtual_model))
+    outcome = await orchestrator.route(make_request(virtual_model))
 
-    assert response.status_code == 200
+    assert outcome.response.status_code == 200
     assert engine.requests == []
     assert provider.chats[0].model == expected_model
+    assert outcome.model_selected == expected_model
+    assert outcome.route_type == "tier"
+    assert outcome.decision is None
+    assert outcome.policy_name is None
+    assert outcome.model_cost is not None
 
 
 @pytest.mark.asyncio
@@ -167,11 +184,14 @@ async def test_explicit_models_pass_through_without_routing() -> None:
     engine = FakeDecisionEngine(CONFIDENT_DECISION)
     orchestrator, provider = make_orchestrator(engine)
 
-    response = await orchestrator.route(make_request("openai/gpt-4o-mini"))
+    outcome = await orchestrator.route(make_request("openai/gpt-4o-mini"))
 
-    assert response.status_code == 200
+    assert outcome.response.status_code == 200
     assert engine.requests == []
     assert provider.chats[0].model == "openai/gpt-4o-mini"
+    assert outcome.route_type == "explicit"
+    assert outcome.tier is None
+    assert outcome.model_cost is None
 
 
 @pytest.mark.asyncio
