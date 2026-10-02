@@ -144,8 +144,23 @@ def test_gateway_routes_auto_through_default_wiring_with_fallback_engine() -> No
     assert response.json()["id"] == "chatcmpl_fallback"
 
 
-def test_gateway_rejects_streaming_until_streaming_milestone() -> None:
-    with make_client(httpx.MockTransport(lambda _: httpx.Response(500))) as client:
+def test_gateway_streams_explicit_model_and_preserves_sse_events() -> None:
+    sse = (
+        b'data: {"id":"chatcmpl_test","choices":[{"delta":{"content":"Hi"}}]}\n\n'
+        b'data: {"id":"chatcmpl_test","choices":[],"usage":{"completion_tokens":1}}\n\n'
+        b"data: [DONE]\n\n"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v1/chat/completions"
+        assert json.loads(request.content) == {
+            "model": "openai/gpt-4o-mini",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "stream": True,
+        }
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=sse)
+
+    with make_client(httpx.MockTransport(handler)) as client:
         response = client.post(
             "/api/v1/chat/completions",
             headers={"Authorization": "Bearer local-dev-key"},
@@ -156,5 +171,70 @@ def test_gateway_rejects_streaming_until_streaming_milestone() -> None:
             },
         )
 
-    assert response.status_code == 501
-    assert response.json()["error"]["type"] == "invalid_request_error"
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.content == sse
+
+
+def test_gateway_streams_virtual_model_after_routing() -> None:
+    sse = b"data: [DONE]\n\n"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert json.loads(request.content) == {
+            "model": "anthropic/claude-3.5-haiku",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "stream": True,
+        }
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=sse)
+
+    with make_client(httpx.MockTransport(handler)) as client:
+        response = client.post(
+            "/api/v1/chat/completions",
+            headers={"Authorization": "Bearer local-dev-key"},
+            json={
+                "model": "system-one/auto",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "stream": True,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.content == sse
+
+
+def test_stream_upstream_error_before_sse_is_a_normal_json_response() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(429, json={"error": {"message": "rate limited"}})
+
+    with make_client(httpx.MockTransport(handler)) as client:
+        response = client.post(
+            "/api/v1/chat/completions",
+            headers={"Authorization": "Bearer local-dev-key"},
+            json={
+                "model": "openai/gpt-4o-mini",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "stream": True,
+            },
+        )
+
+    assert response.status_code == 429
+    assert response.json() == {"error": {"message": "rate limited"}}
+
+
+def test_gateway_maps_stream_connection_failure_before_sse_to_upstream_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    with make_client(httpx.MockTransport(handler)) as client:
+        response = client.post(
+            "/api/v1/chat/completions",
+            headers={"Authorization": "Bearer local-dev-key"},
+            json={
+                "model": "openai/gpt-4o-mini",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "stream": True,
+            },
+        )
+
+    assert response.status_code == 502
+    assert response.json()["error"]["type"] == "upstream_error"

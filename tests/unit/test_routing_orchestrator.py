@@ -31,6 +31,9 @@ class RecordingProvider:
             body={"id": "chatcmpl_fake", "model": request.model},
         )
 
+    async def stream(self, request: CompletionRequest) -> CompletionResponse:
+        raise AssertionError("streaming must not be called in this test")
+
     async def list_models(self) -> CompletionResponse:
         raise AssertionError("routing must not call list_models")
 

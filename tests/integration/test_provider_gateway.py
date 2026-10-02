@@ -1,11 +1,17 @@
 """Integration tests for the gateway using fake provider implementations."""
 
+from collections.abc import AsyncIterator
+
 import pytest
 from fastapi.testclient import TestClient
 
 from system_one.api.app import app
 from system_one.core.config import get_settings
-from system_one.domain.completions import CompletionRequest, CompletionResponse
+from system_one.domain.completions import (
+    CompletionRequest,
+    CompletionResponse,
+    StreamingCompletionResponse,
+)
 from system_one.domain.decision import Decision, RoutingRequest
 from system_one.providers.base import LLMProvider
 from system_one.providers.errors import (
@@ -24,6 +30,8 @@ class FakeProvider:
 
     def __init__(self) -> None:
         self.chats: list[CompletionRequest] = []
+        self.streams: list[CompletionRequest] = []
+        self.closed_streams: list[CompletionRequest] = []
         self.models_called = False
 
     async def chat(self, request: CompletionRequest) -> CompletionResponse:
@@ -32,6 +40,21 @@ class FakeProvider:
             status_code=200,
             body={"id": "chatcmpl_fake", "model": request.model},
         )
+
+    async def stream(
+        self, request: CompletionRequest
+    ) -> StreamingCompletionResponse:
+        self.streams.append(request)
+
+        async def chunks() -> AsyncIterator[bytes]:
+            yield b'data: {"id":"chatcmpl_fake","choices":[{"delta":{"content":"Hi"}}]}\n\n'
+            yield b'data: {"id":"chatcmpl_fake","choices":[],"usage":{"completion_tokens":1}}\n\n'
+            yield b"data: [DONE]\n\n"
+
+        async def close() -> None:
+            self.closed_streams.append(request)
+
+        return StreamingCompletionResponse(200, chunks(), close)
 
     async def list_models(self) -> CompletionResponse:
         self.models_called = True
@@ -44,6 +67,11 @@ class UnavailableProvider:
     async def chat(self, request: CompletionRequest) -> CompletionResponse:
         raise ProviderUnavailableError("OpenRouter request failed")
 
+    async def stream(
+        self, request: CompletionRequest
+    ) -> CompletionResponse | StreamingCompletionResponse:
+        raise ProviderUnavailableError("OpenRouter request failed")
+
     async def list_models(self) -> CompletionResponse:
         raise ProviderUnavailableError("OpenRouter request failed")
 
@@ -52,6 +80,11 @@ class ConfigurationErrorProvider:
     """Fake provider failing before any HTTP call."""
 
     async def chat(self, request: CompletionRequest) -> CompletionResponse:
+        raise ProviderConfigurationError("OpenRouter API key is not configured")
+
+    async def stream(
+        self, request: CompletionRequest
+    ) -> CompletionResponse | StreamingCompletionResponse:
         raise ProviderConfigurationError("OpenRouter API key is not configured")
 
     async def list_models(self) -> CompletionResponse:
@@ -271,7 +304,17 @@ def test_gateway_uses_policy_fallback_for_low_confidence_decisions() -> None:
     assert provider.chats[0].model == "vendor/balanced-primary"
 
 
-def test_gateway_blocks_streaming_for_virtual_models() -> None:
+@pytest.mark.parametrize(
+    ("model", "expected_model", "decision_count"),
+    [
+        ("openai/gpt-4o-mini", "openai/gpt-4o-mini", 0),
+        ("system-one/auto", "vendor/balanced-primary", 1),
+        ("system-one/fast", "vendor/fast-primary", 0),
+    ],
+)
+def test_gateway_streams_explicit_and_virtual_models(
+    model: str, expected_model: str, decision_count: int
+) -> None:
     engine = FakeDecisionEngine(CONFIDENT_DECISION)
     client, provider = make_routing_client(engine)
     with client:
@@ -279,15 +322,22 @@ def test_gateway_blocks_streaming_for_virtual_models() -> None:
             "/api/v1/chat/completions",
             headers=AUTH,
             json={
-                "model": "system-one/auto",
+                "model": model,
                 "messages": [{"role": "user", "content": "Hello"}],
                 "stream": True,
             },
         )
 
-    assert response.status_code == 501
-    assert engine.requests == []
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.content.endswith(b"data: [DONE]\n\n")
+    assert b'"usage":{"completion_tokens":1}' in response.content
+    assert len(engine.requests) == decision_count
     assert provider.chats == []
+    assert len(provider.streams) == 1
+    assert provider.streams[0].model == expected_model
+    assert provider.streams[0].stream is True
+    assert provider.closed_streams == provider.streams
 
 
 def test_gateway_maps_transport_failure_to_upstream_error() -> None:
@@ -321,9 +371,8 @@ def test_gateway_requires_authentication() -> None:
     assert response.json()["detail"] == "Invalid or missing API key"
 
 
-def test_gateway_blocks_streaming_requests() -> None:
-    provider = FakeProvider()
-    with make_client(provider) as client:
+def test_gateway_maps_stream_start_failure_to_upstream_error() -> None:
+    with make_client(UnavailableProvider()) as client:
         response = client.post(
             "/api/v1/chat/completions",
             headers=AUTH,
@@ -334,5 +383,5 @@ def test_gateway_blocks_streaming_requests() -> None:
             },
         )
 
-    assert response.status_code == 501
-    assert provider.chats == []
+    assert response.status_code == 502
+    assert response.json()["error"]["type"] == "upstream_error"

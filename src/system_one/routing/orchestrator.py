@@ -15,6 +15,7 @@ from dataclasses import replace
 from system_one.domain.completions import (
     CompletionRequest,
     CompletionResponse,
+    StreamingCompletionResponse,
 )
 from system_one.domain.decision import RoutingRequest, RoutingTier
 from system_one.providers.base import LLMProvider
@@ -59,10 +60,12 @@ class RoutingOrchestrator:
         self._model_registry = model_registry
         self._provider = provider
 
-    async def route(self, request: CompletionRequest) -> CompletionResponse:
+    async def route(
+        self, request: CompletionRequest
+    ) -> CompletionResponse | StreamingCompletionResponse:
         """Execute the routing lifecycle for the request."""
         if not request.model.startswith(VIRTUAL_MODEL_PREFIX):
-            return await self._provider.chat(request)
+            return await self._execute(request)
 
         virtual_name = request.model[len(VIRTUAL_MODEL_PREFIX) :]
         if virtual_name == _VIRTUAL_AUTO_MODEL:
@@ -79,8 +82,16 @@ class RoutingOrchestrator:
 
     async def _chat_for_tier(
         self, request: CompletionRequest, tier: RoutingTier
-    ) -> CompletionResponse:
+    ) -> CompletionResponse | StreamingCompletionResponse:
         """Resolve the tier model and execute the provider call."""
         profile = self._model_registry.select(tier)
         routed_request = replace(request, model=profile.id)
-        return await self._provider.chat(routed_request)
+        return await self._execute(routed_request)
+
+    async def _execute(
+        self, request: CompletionRequest
+    ) -> CompletionResponse | StreamingCompletionResponse:
+        """Select the provider operation without changing model routing policy."""
+        if request.stream:
+            return await self._provider.stream(request)
+        return await self._provider.chat(request)

@@ -5,9 +5,8 @@ fast decisions, deterministic policies, and measurable model selection.
 
 ## Current Status
 
-Phase 0 bootstrap and the initial OpenRouter passthrough are implemented.
-Automatic routing, streaming, and virtual `system-one/*` models are not enabled
-yet.
+The bootstrap, OpenRouter passthrough, virtual-model routing, and SSE streaming
+are implemented.
 
 Install dependencies with `uv` and run the checks:
 
@@ -45,7 +44,8 @@ passed through to OpenRouter, and virtual routing models `system-one/auto`,
 models resolve through the Jev decision engine, the deterministic policy engine,
 and the model registry (`registry/models.yaml`) to a concrete OpenRouter model;
 `system-one/fast|balanced|reasoning` map directly to their tier without a
-decision-engine call. Streaming requests are deferred to a later milestone.
+decision-engine call. Requests with `stream: true` receive the provider's SSE
+events, including any final usage chunk the provider sends.
 
 Run the example request after starting the service:
 

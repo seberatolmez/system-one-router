@@ -1,9 +1,11 @@
 """OpenAI-compatible gateway routes on top of the provider contract."""
 
+from collections.abc import AsyncIterator
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from starlette.background import BackgroundTask
 
 from system_one.api.auth import require_api_key
 from system_one.api.schemas import ChatCompletionRequest
@@ -11,6 +13,7 @@ from system_one.domain.completions import (
     CompletionMessage,
     CompletionRequest,
     CompletionResponse,
+    StreamingCompletionResponse,
 )
 from system_one.providers.base import LLMProvider
 from system_one.providers.errors import (
@@ -64,6 +67,26 @@ def error_response(
 def passthrough_response(response: CompletionResponse) -> JSONResponse:
     """Return the upstream body with the upstream status code."""
     return JSONResponse(status_code=response.status_code, content=response.body)
+
+
+def streaming_passthrough_response(
+    response: StreamingCompletionResponse,
+) -> StreamingResponse:
+    """Pass SSE bytes through and close upstream on every response lifecycle."""
+
+    async def body() -> AsyncIterator[bytes]:
+        try:
+            async for chunk in response:
+                yield chunk
+        finally:
+            await response.aclose()
+
+    return StreamingResponse(
+        body(),
+        status_code=response.status_code,
+        media_type="text/event-stream",
+        background=BackgroundTask(response.aclose),
+    )
 
 
 def merged_models_response(response: CompletionResponse) -> JSONResponse:
@@ -120,14 +143,8 @@ async def chat_completions(
     request: ChatCompletionRequest,
     _: Authenticated,
     orchestrator: Annotated[RoutingOrchestrator, Depends(get_orchestrator)],
-) -> JSONResponse:
+) -> Response:
     """Execute the routing lifecycle; explicit models pass through unchanged."""
-    if request.stream:
-        return error_response(
-            status.HTTP_501_NOT_IMPLEMENTED,
-            "Streaming is not enabled yet",
-        )
-
     domain_request = to_completion_request(request)
     try:
         response = await orchestrator.route(domain_request)
@@ -142,4 +159,6 @@ async def chat_completions(
     except ProviderUnavailableError as error:
         return error_response(status.HTTP_502_BAD_GATEWAY, str(error), "upstream_error")
 
+    if isinstance(response, StreamingCompletionResponse):
+        return streaming_passthrough_response(response)
     return passthrough_response(response)
