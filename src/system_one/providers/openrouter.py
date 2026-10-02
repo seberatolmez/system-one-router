@@ -120,6 +120,8 @@ class OpenRouterProvider:
             "stream": request.stream,
         }
         payload.update(request.options)
+        if request.stream:
+            payload["stream_options"] = {"include_usage": True}
         return payload
 
     async def _request(

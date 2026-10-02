@@ -1,5 +1,7 @@
 """FastAPI application and system endpoints."""
 
+from pathlib import Path
+
 from fastapi import FastAPI
 
 from system_one.api.routes import router
@@ -9,6 +11,7 @@ from system_one.routing.decision import DecisionEngine, InternalDecisionEngine, 
 from system_one.routing.orchestrator import RoutingOrchestrator
 from system_one.routing.policy import DeterministicPolicyEngine, load_policy_config
 from system_one.routing.registry import load_model_registry
+from system_one.telemetry import configure_telemetry_logging
 
 
 def create_app() -> FastAPI:
@@ -18,6 +21,7 @@ def create_app() -> FastAPI:
     fails fast at startup instead of producing per-request failures.
     """
     settings = get_settings()
+    configure_telemetry_logging(settings.log_level)
     application = FastAPI(
         title="System One Router",
         version="0.1.0",
@@ -37,6 +41,7 @@ def create_app() -> FastAPI:
         policy_engine=policy_engine,
         model_registry=model_registry,
         provider=provider,
+        policy_name=Path(settings.policy_file).stem,
     )
     application.include_router(router)
 

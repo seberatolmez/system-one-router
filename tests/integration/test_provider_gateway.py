@@ -1,5 +1,7 @@
 """Integration tests for the gateway using fake provider implementations."""
 
+import json
+import logging
 from collections.abc import AsyncIterator
 
 import pytest
@@ -48,7 +50,10 @@ class FakeProvider:
 
         async def chunks() -> AsyncIterator[bytes]:
             yield b'data: {"id":"chatcmpl_fake","choices":[{"delta":{"content":"Hi"}}]}\n\n'
-            yield b'data: {"id":"chatcmpl_fake","choices":[],"usage":{"completion_tokens":1}}\n\n'
+            yield (
+                b'data: {"id":"chatcmpl_fake","choices":[],"usage":'
+                b'{"prompt_tokens":2,"completion_tokens":1}}\n\n'
+            )
             yield b"data: [DONE]\n\n"
 
         async def close() -> None:
@@ -140,6 +145,7 @@ def make_client(provider: LLMProvider) -> TestClient:
         policy_engine=DeterministicPolicyEngine(load_policy_config("policies/balanced.yaml")),
         model_registry=ModelRegistry(make_fallback_profiles()),
         provider=provider,
+        policy_name="balanced",
     )
     return TestClient(app)
 
@@ -174,6 +180,7 @@ def make_routing_client(
         policy_engine=DeterministicPolicyEngine(load_policy_config("policies/balanced.yaml")),
         model_registry=ModelRegistry(make_fallback_profiles()),
         provider=provider,
+        policy_name="balanced",
     )
     return TestClient(app), provider
 
@@ -313,8 +320,12 @@ def test_gateway_uses_policy_fallback_for_low_confidence_decisions() -> None:
     ],
 )
 def test_gateway_streams_explicit_and_virtual_models(
-    model: str, expected_model: str, decision_count: int
+    model: str,
+    expected_model: str,
+    decision_count: int,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
+    caplog.set_level(logging.INFO, logger="system_one.telemetry")
     engine = FakeDecisionEngine(CONFIDENT_DECISION)
     client, provider = make_routing_client(engine)
     with client:
@@ -330,14 +341,28 @@ def test_gateway_streams_explicit_and_virtual_models(
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
+    request_id = response.headers["x-request-id"]
+    assert request_id.startswith("req_")
     assert response.content.endswith(b"data: [DONE]\n\n")
-    assert b'"usage":{"completion_tokens":1}' in response.content
+    assert b'"usage":{"prompt_tokens":2,"completion_tokens":1}' in response.content
     assert len(engine.requests) == decision_count
     assert provider.chats == []
     assert len(provider.streams) == 1
     assert provider.streams[0].model == expected_model
     assert provider.streams[0].stream is True
     assert provider.closed_streams == provider.streams
+    events = [json.loads(record.getMessage()) for record in caplog.records]
+    if model.startswith("system-one/"):
+        receipt = next(event["receipt"] for event in events if event["event"] == "routing_receipt")
+        assert receipt["request_id"] == request_id
+        assert receipt["model_selected"] == expected_model
+        assert receipt["input_tokens"] == 2
+        assert receipt["output_tokens"] == 1
+        assert receipt["estimated_cost"] == pytest.approx(0.0000006)
+    else:
+        event = next(event for event in events if event["event"] == "completion_request")
+        assert event["request_id"] == request_id
+        assert event["status_code"] == 200
 
 
 def test_gateway_maps_transport_failure_to_upstream_error() -> None:
