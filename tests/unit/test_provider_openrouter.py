@@ -81,6 +81,7 @@ async def test_stream_forwards_sse_bytes_and_closes_upstream_on_completion() -> 
         assert request.method == "POST"
         assert request.url.path == "/api/v1/chat/completions"
         assert b'"stream":true' in request.content
+        assert b'"stream_options":{"include_usage":true}' in request.content
         return httpx.Response(
             200,
             headers={"content-type": "text/event-stream"},

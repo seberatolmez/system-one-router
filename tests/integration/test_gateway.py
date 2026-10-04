@@ -1,6 +1,7 @@
 """Integration tests for the gateway flow through the provider abstraction."""
 
 import json
+import logging
 
 import httpx
 import pytest
@@ -35,6 +36,7 @@ def make_client(handler: httpx.MockTransport) -> TestClient:
         policy_engine=DeterministicPolicyEngine(load_policy_config("policies/balanced.yaml")),
         model_registry=load_model_registry("registry/models.yaml"),
         provider=provider,
+        policy_name="balanced",
     )
     return TestClient(app)
 
@@ -126,12 +128,22 @@ def test_gateway_rejects_unknown_virtual_models(model: str, expected_message: st
     assert response.json()["error"]["message"] == expected_message
 
 
-def test_gateway_routes_auto_through_default_wiring_with_fallback_engine() -> None:
+def test_gateway_routes_auto_through_default_wiring_with_fallback_engine(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """With Jev disabled, auto still resolves through policy + registry."""
+    caplog.set_level(logging.INFO, logger="system_one.telemetry")
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert json.loads(request.content)["model"] == "anthropic/claude-3.5-haiku"
-        return httpx.Response(200, json={"id": "chatcmpl_fallback", "model": "routed"})
+        return httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl_fallback",
+                "model": "routed",
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+            },
+        )
 
     with make_client(httpx.MockTransport(handler)) as client:
         response = client.post(
@@ -142,12 +154,32 @@ def test_gateway_routes_auto_through_default_wiring_with_fallback_engine() -> No
 
     assert response.status_code == 200
     assert response.json()["id"] == "chatcmpl_fallback"
+    request_id = response.headers["x-request-id"]
+    assert request_id.startswith("req_")
+    events = [json.loads(record.getMessage()) for record in caplog.records]
+    receipt = next(event["receipt"] for event in events if event["event"] == "routing_receipt")
+    assert receipt["request_id"] == request_id
+    assert receipt["model_requested"] == "system-one/auto"
+    assert receipt["model_selected"] == "anthropic/claude-3.5-haiku"
+    assert receipt["policy_name"] == "balanced"
+    assert receipt["decision"]["decision_source"] == "internal"
+    assert receipt["decision"]["fallback_reason"] == "decision_engine_disabled"
+    assert receipt["input_tokens"] == 10
+    assert receipt["output_tokens"] == 20
+    assert receipt["estimated_cost"] == pytest.approx(0.000088)
+    assert receipt["provider_latency_ms"] >= 0
+    assert receipt["routing_latency_ms"] >= 0
+    assert receipt["total_latency_ms"] >= receipt["routing_latency_ms"]
 
 
-def test_gateway_streams_explicit_model_and_preserves_sse_events() -> None:
+def test_gateway_streams_explicit_model_and_preserves_sse_events(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="system_one.telemetry")
     sse = (
         b'data: {"id":"chatcmpl_test","choices":[{"delta":{"content":"Hi"}}]}\n\n'
-        b'data: {"id":"chatcmpl_test","choices":[],"usage":{"completion_tokens":1}}\n\n'
+        b'data: {"id":"chatcmpl_test","choices":[],"usage":'
+        b'{"prompt_tokens":10,"completion_tokens":1}}\n\n'
         b"data: [DONE]\n\n"
     )
 
@@ -157,6 +189,7 @@ def test_gateway_streams_explicit_model_and_preserves_sse_events() -> None:
             "model": "openai/gpt-4o-mini",
             "messages": [{"role": "user", "content": "Hello"}],
             "stream": True,
+            "stream_options": {"include_usage": True},
         }
         return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=sse)
 
@@ -174,16 +207,29 @@ def test_gateway_streams_explicit_model_and_preserves_sse_events() -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     assert response.content == sse
+    assert response.headers["x-request-id"].startswith("req_")
+    event = json.loads(caplog.records[-1].getMessage())
+    assert event["event"] == "completion_request"
+    assert event["request_id"] == response.headers["x-request-id"]
+    assert event["status_code"] == 200
 
 
-def test_gateway_streams_virtual_model_after_routing() -> None:
-    sse = b"data: [DONE]\n\n"
+def test_gateway_streams_virtual_model_after_routing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="system_one.telemetry")
+    sse = (
+        b'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n'
+        b'data: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}\n\n'
+        b"data: [DONE]\n\n"
+    )
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert json.loads(request.content) == {
             "model": "anthropic/claude-3.5-haiku",
             "messages": [{"role": "user", "content": "Hello"}],
             "stream": True,
+            "stream_options": {"include_usage": True},
         }
         return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=sse)
 
@@ -200,6 +246,18 @@ def test_gateway_streams_virtual_model_after_routing() -> None:
 
     assert response.status_code == 200
     assert response.content == sse
+    receipt = next(
+        json.loads(record.getMessage())["receipt"]
+        for record in caplog.records
+        if json.loads(record.getMessage())["event"] == "routing_receipt"
+    )
+    assert receipt["request_id"] == response.headers["x-request-id"]
+    assert receipt["input_tokens"] == 7
+    assert receipt["output_tokens"] == 3
+    assert receipt["estimated_cost"] == pytest.approx(
+        (7 * 0.8 + 3 * 4.0) / 1_000_000
+    )
+    assert receipt["status_code"] == 200
 
 
 def test_stream_upstream_error_before_sse_is_a_normal_json_response() -> None:
@@ -219,6 +277,7 @@ def test_stream_upstream_error_before_sse_is_a_normal_json_response() -> None:
 
     assert response.status_code == 429
     assert response.json() == {"error": {"message": "rate limited"}}
+    assert response.headers["x-request-id"].startswith("req_")
 
 
 def test_gateway_maps_stream_connection_failure_before_sse_to_upstream_error() -> None:
@@ -238,3 +297,34 @@ def test_gateway_maps_stream_connection_failure_before_sse_to_upstream_error() -
 
     assert response.status_code == 502
     assert response.json()["error"]["type"] == "upstream_error"
+    assert response.headers["x-request-id"].startswith("req_")
+
+
+def test_gateway_logs_receipt_when_routed_provider_call_fails(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.INFO, logger="system_one.telemetry")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    with make_client(httpx.MockTransport(handler)) as client:
+        response = client.post(
+            "/api/v1/chat/completions",
+            headers={"Authorization": "Bearer local-dev-key"},
+            json={
+                "model": "system-one/auto",
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+        )
+
+    assert response.status_code == 502
+    event = json.loads(caplog.records[-1].getMessage())
+    receipt = event["receipt"]
+    assert event["event"] == "routing_receipt"
+    assert receipt["request_id"] == response.headers["x-request-id"]
+    assert receipt["model_selected"] == "anthropic/claude-3.5-haiku"
+    assert receipt["policy_name"] == "balanced"
+    assert receipt["decision"]["decision_source"] == "internal"
+    assert receipt["status_code"] == 502
+    assert receipt["error_type"] == "upstream_error"
