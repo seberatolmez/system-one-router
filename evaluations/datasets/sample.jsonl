@@ -1,0 +1,6 @@
+{"id":"simple-explanation","messages":[{"role":"user","content":"In one sentence, what is a database index?"}],"expected_tier":"fast"}
+{"id":"short-rewrite","messages":[{"role":"user","content":"Rewrite this sentence to be more concise: The meeting has been postponed until a later date."}],"expected_tier":"fast"}
+{"id":"sql-debugging","messages":[{"role":"user","content":"Why does this SQL query return duplicate customers when joining orders? Explain a safe fix."}],"expected_tier":"balanced"}
+{"id":"api-design","messages":[{"role":"user","content":"Propose a versioning strategy for a public REST API and discuss compatibility tradeoffs."}],"expected_tier":"balanced"}
+{"id":"concurrency-implementation","messages":[{"role":"user","content":"Design and implement optimistic locking for a multi-tenant inventory service. Include race conditions and tests."}],"expected_tier":"reasoning"}
+{"id":"security-review","messages":[{"role":"user","content":"Review a password-reset flow for security risks, propose mitigations, and prioritize them with rationale."}],"expected_tier":"reasoning"}
