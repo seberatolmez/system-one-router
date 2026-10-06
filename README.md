@@ -52,3 +52,23 @@ Run the example request after starting the service:
 ```text
 sh examples/curl/chat-completion.sh
 ```
+
+## Evaluation framework
+
+The evaluation runner applies the same JSONL dataset to each selected virtual
+model strategy and writes a machine-readable run plus a Markdown comparison.
+The included `evaluations/datasets/sample.jsonl` is a small smoke-test dataset,
+not a measured benchmark or a quality claim. Live inference requires an
+`OPENROUTER_API_KEY`; Jev decisions are enabled separately with the Jev
+settings. The configured policy and registry files are used by the runner.
+
+```text
+uv run python -m system_one.evaluation.cli --dataset evaluations/datasets/sample.jsonl --strategy system-one/auto --strategy system-one/fast --output-dir evaluations/reports
+```
+
+Available strategies are `system-one/auto`, `system-one/fast`,
+`system-one/balanced`, and `system-one/reasoning`. The runner records routing
+accuracy against optional `expected_tier` labels, measured cost, latency,
+error rate, and escalation rate. Missing token usage or pricing is left
+unmeasured rather than reported as zero. Quality scoring and benchmark claims
+are intentionally not included in this framework milestone.
