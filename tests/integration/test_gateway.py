@@ -1,4 +1,4 @@
-"""Integration tests for the gateway flow through the provider abstraction."""
+﻿"""Integration tests for the gateway flow through the provider abstraction."""
 
 import json
 import logging
@@ -135,7 +135,7 @@ def test_gateway_routes_auto_through_default_wiring_with_fallback_engine(
     caplog.set_level(logging.INFO, logger="system_one.telemetry")
 
     def handler(request: httpx.Request) -> httpx.Response:
-        assert json.loads(request.content)["model"] == "anthropic/claude-3.5-haiku"
+        assert json.loads(request.content)["model"] == "openai/gpt-6.1-terra"
         return httpx.Response(
             200,
             json={
@@ -160,13 +160,13 @@ def test_gateway_routes_auto_through_default_wiring_with_fallback_engine(
     receipt = next(event["receipt"] for event in events if event["event"] == "routing_receipt")
     assert receipt["request_id"] == request_id
     assert receipt["model_requested"] == "system-one/auto"
-    assert receipt["model_selected"] == "anthropic/claude-3.5-haiku"
+    assert receipt["model_selected"] == "openai/gpt-6.1-terra"
     assert receipt["policy_name"] == "balanced"
     assert receipt["decision"]["decision_source"] == "internal"
     assert receipt["decision"]["fallback_reason"] == "decision_engine_disabled"
     assert receipt["input_tokens"] == 10
     assert receipt["output_tokens"] == 20
-    assert receipt["estimated_cost"] == pytest.approx(0.000088)
+    assert receipt["estimated_cost"] == pytest.approx(0.00011)
     assert receipt["provider_latency_ms"] >= 0
     assert receipt["routing_latency_ms"] >= 0
     assert receipt["total_latency_ms"] >= receipt["routing_latency_ms"]
@@ -226,7 +226,7 @@ def test_gateway_streams_virtual_model_after_routing(
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert json.loads(request.content) == {
-            "model": "anthropic/claude-3.5-haiku",
+            "model": "openai/gpt-6.1-terra",
             "messages": [{"role": "user", "content": "Hello"}],
             "stream": True,
             "stream_options": {"include_usage": True},
@@ -255,7 +255,7 @@ def test_gateway_streams_virtual_model_after_routing(
     assert receipt["input_tokens"] == 7
     assert receipt["output_tokens"] == 3
     assert receipt["estimated_cost"] == pytest.approx(
-        (7 * 0.8 + 3 * 4.0) / 1_000_000
+        (7 * 1.0 + 3 * 5.0) / 1_000_000
     )
     assert receipt["status_code"] == 200
 
@@ -323,7 +323,7 @@ def test_gateway_logs_receipt_when_routed_provider_call_fails(
     receipt = event["receipt"]
     assert event["event"] == "routing_receipt"
     assert receipt["request_id"] == response.headers["x-request-id"]
-    assert receipt["model_selected"] == "anthropic/claude-3.5-haiku"
+    assert receipt["model_selected"] == "openai/gpt-6.1-terra"
     assert receipt["policy_name"] == "balanced"
     assert receipt["decision"]["decision_source"] == "internal"
     assert receipt["status_code"] == 502
