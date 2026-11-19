@@ -1,11 +1,12 @@
 """Run a dataset through the same set of strategies and collect comparable results."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from time import perf_counter
 
-from system_one.evaluation.dataset import EvaluationDataset
+from system_one.evaluation.dataset import EvaluationDataset, EvaluationItem
+from system_one.evaluation.grading import QualityGrader
 from system_one.evaluation.metrics import DEFAULT_METRICS, EvaluationMetric, MetricResult
 from system_one.evaluation.strategy import BenchmarkStrategy, StrategyOutcome
 
@@ -30,16 +31,34 @@ class BenchmarkResult:
     strategies: tuple[StrategyResult, ...]
 
 
+async def _grade(
+    grader: QualityGrader, item: EvaluationItem, outcome: StrategyOutcome
+) -> StrategyOutcome:
+    if outcome.response_text is None:
+        return replace(outcome, quality_passed=False) if outcome.error_type is not None else outcome
+    try:
+        passed = await grader.grade(item, outcome.response_text)
+    except Exception:
+        passed = None
+    return replace(outcome, quality_passed=passed)
+
+
 async def run_benchmark(
     dataset: EvaluationDataset,
     strategies: Sequence[BenchmarkStrategy],
     metrics: Sequence[EvaluationMetric] = DEFAULT_METRICS,
+    grader: QualityGrader | None = None,
 ) -> BenchmarkResult:
     """Run all dataset items sequentially for each strategy.
 
     Sequential execution avoids one strategy's concurrency pattern influencing
     the provider latency observed by another. A failing item is captured and
     does not stop the remaining items or strategies.
+
+    With a ``grader``, each response is graded and then its text is dropped, so
+    reports hold verdicts rather than model output. A request that errored has no
+    answer and is recorded as failed; a grader that cannot decide or raises leaves
+    the verdict unmeasured.
     """
     if not dataset.items:
         raise ValueError("benchmark dataset must contain at least one item")
@@ -81,7 +100,9 @@ async def run_benchmark(
                     status_code=None,
                     error_type=type(error).__name__,
                 )
-            outcomes.append(outcome)
+            if grader is not None:
+                outcome = await _grade(grader, item, outcome)
+            outcomes.append(replace(outcome, response_text=None))
 
         immutable_outcomes = tuple(outcomes)
         metric_results = tuple(
