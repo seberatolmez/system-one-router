@@ -99,6 +99,19 @@ def test_decision_rejects_confidence_above_range() -> None:
         make_decision(confidence=1.5)
 
 
+def test_decision_cost_defaults_to_none_and_rejects_negative() -> None:
+    assert make_decision().cost is None
+    with pytest.raises(ValueError, match="cost must not be negative"):
+        Decision(
+            task_type="coding",
+            complexity=3.0,
+            quality_requirement=3.0,
+            latency_requirement=3.0,
+            confidence=0.9,
+            cost=-0.1,
+        )
+
+
 def test_decision_rejects_empty_decision_source() -> None:
     with pytest.raises(ValueError, match="decision_source must not be empty"):
         make_decision(decision_source=" ")

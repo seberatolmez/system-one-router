@@ -46,19 +46,19 @@ def valid_body(**answer_overrides: object) -> dict[str, object]:
         },
         "complexity": {
             "type": "score",
-            "score": 3.4,
+            "score": 2.5,
             "confidence": 0.91,
             "probabilities": {"0": 0, "1": 0, "2": 1},
             "legend": {"2": "Moderate", "3": "Advanced"},
         },
         "quality_requirement": {
             "type": "score",
-            "score": 4.2,
+            "score": 3.25,
             "confidence": 0.93,
         },
         "latency_requirement": {
             "type": "score",
-            "score": 1.99,
+            "score": 0.75,
             "confidence": 0.99,
             "probabilities": {"0": 0, "1": 0, "2": 1},
             "legend": {"1": "Instant", "2": "Tight"},
@@ -95,9 +95,9 @@ async def test_valid_response_maps_to_typed_decision() -> None:
     decision = await engine.decide(make_request())
 
     assert decision.task_type == "coding"
-    assert decision.complexity == 3.4
-    assert decision.quality_requirement == 4.2
-    assert decision.latency_requirement == 1.99
+    assert decision.complexity == 3.5
+    assert decision.quality_requirement == 4.25
+    assert decision.latency_requirement == 1.75
     assert decision.confidence == 0.67
     assert decision.decision_source == "jev"
     assert decision.fallback_reason is None
@@ -117,7 +117,7 @@ async def test_confidence_is_minimum_across_answers() -> None:
 
 async def test_answer_without_confidence_is_skipped_for_minimum() -> None:
     def handler(_: httpx.Request) -> httpx.Response:
-        body = valid_body(complexity={"type": "score", "score": 2.0})
+        body = valid_body(complexity={"type": "score", "score": 1.0})
         return httpx.Response(200, json=body)
 
     engine = make_engine(httpx.MockTransport(handler))
@@ -141,7 +141,7 @@ async def test_out_of_range_confidence_is_invalid_response() -> None:
     assert decision.fallback_reason == "decision_engine_invalid_response"
 
 
-@pytest.mark.parametrize("score", [6.0, 0.5, "abc", None, True, [2.0]])
+@pytest.mark.parametrize("score", [5.0, -0.5, "abc", None, True, [2.0]])
 async def test_unusable_score_triggers_invalid_response_fallback(score: object) -> None:
     def handler(_: httpx.Request) -> httpx.Response:
         answer = {"type": "score", "score": score, "confidence": 0.9}
@@ -157,7 +157,7 @@ async def test_unusable_score_triggers_invalid_response_fallback(score: object) 
 
 async def test_string_encoded_score_is_coerced() -> None:
     def handler(_: httpx.Request) -> httpx.Response:
-        answer = {"type": "score", "score": "2", "confidence": 0.9}
+        answer = {"type": "score", "score": "1", "confidence": 0.9}
         return httpx.Response(200, json=valid_body(complexity=answer))
 
     engine = make_engine(httpx.MockTransport(handler))
@@ -166,6 +166,56 @@ async def test_string_encoded_score_is_coerced() -> None:
 
     assert decision.complexity == 2.0
     assert decision.decision_source == "jev"
+
+
+async def test_zero_indexed_score_bounds_map_to_one_through_five() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        low = {"type": "score", "score": 0, "confidence": 0.9}
+        high = {"type": "score", "score": 4, "confidence": 0.9}
+        return httpx.Response(200, json=valid_body(complexity=low, quality_requirement=high))
+
+    engine = make_engine(httpx.MockTransport(handler))
+
+    decision = await engine.decide(make_request())
+
+    assert decision.complexity == 1.0
+    assert decision.quality_requirement == 5.0
+
+
+@pytest.mark.parametrize("name", ["task_type", "complexity"])
+async def test_refusal_answer_returns_refusal_fallback(name: str) -> None:
+    engine = make_engine(
+        httpx.MockTransport(
+            lambda _: httpx.Response(200, json=valid_body(**{name: {"type": "refusal"}}))
+        )
+    )
+
+    decision = await engine.decide(make_request())
+
+    assert decision == fallback_decision("decision_engine_refusal")
+
+
+async def test_usage_cost_is_recorded_on_decision() -> None:
+    engine = make_engine(httpx.MockTransport(lambda _: httpx.Response(200, json=valid_body())))
+
+    decision = await engine.decide(make_request())
+
+    assert decision.cost == 0.000019992
+
+
+@pytest.mark.parametrize("usage", [None, {}, {"cost": -1}, {"cost": "free"}, {"cost": True}])
+async def test_missing_or_unusable_usage_cost_is_none(usage: object) -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        body = valid_body()
+        body["usage"] = usage
+        return httpx.Response(200, json=body)
+
+    engine = make_engine(httpx.MockTransport(handler))
+
+    decision = await engine.decide(make_request())
+
+    assert decision.decision_source == "jev"
+    assert decision.cost is None
 
 
 async def test_missing_answers_object_triggers_invalid_response_fallback() -> None:

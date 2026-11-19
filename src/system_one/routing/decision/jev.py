@@ -6,8 +6,8 @@ The engine posts a deterministic, code-owned decision request to
 unexpected HTTP statuses, and schema-invalid bodies all produce an explicit
 fallback decision with ``decision_source="fallback"`` and a ``fallback_reason``
 from ``decision_engine_timeout`` / ``decision_engine_unavailable`` /
-``decision_engine_invalid_response``. A missing or unconfigured OpenRouter API
-key raises ``ProviderConfigurationError`` instead of falling back.
+``decision_engine_invalid_response`` / ``decision_engine_refusal``. A missing or
+unconfigured OpenRouter API key raises ``ProviderConfigurationError`` instead of falling back.
 
 The fallback decision uses the sentinel ``task_type="general"``, which is
 deliberately not one of the Jev ``choice`` options so that only the fallback
@@ -26,13 +26,16 @@ from system_one.providers.errors import ProviderConfigurationError
 _FALLBACK_REASON_TIMEOUT = "decision_engine_timeout"
 _FALLBACK_REASON_UNAVAILABLE = "decision_engine_unavailable"
 _FALLBACK_REASON_INVALID = "decision_engine_invalid_response"
+_FALLBACK_REASON_REFUSAL = "decision_engine_refusal"
 
 _FALLBACK_TASK_TYPE = "general"
 _FALLBACK_SCORE = 3.0
 _FALLBACK_CONFIDENCE = 0.0
 
-_MIN_SCORE = 1.0
-_MAX_SCORE = 5.0
+# Decisions API score answers are 0-indexed (0..N-1) for N criteria; the domain uses 1..5.
+_MIN_RAW_SCORE = 0.0
+_MAX_RAW_SCORE = 4.0
+_SCORE_OFFSET = 1.0
 
 _TASK_TYPE_CRITERIA: dict[str, str] = {
     "coding": "Writing or debugging code.",
@@ -148,6 +151,7 @@ class JevDecisionEngine:
             latency_requirement=latency_requirement,
             confidence=min(confidences),
             decision_source="jev",
+            cost=_usage_cost(body),
         )
 
     def _answers(self, body: dict[str, object]) -> dict[str, object]:
@@ -214,6 +218,8 @@ def _answer(answers: dict[str, object], name: str) -> dict[str, object]:
     answer = answers.get(name)
     if not isinstance(answer, dict):
         raise _DecisionFailure(_FALLBACK_REASON_INVALID)
+    if answer.get("type") == "refusal":
+        raise _DecisionFailure(_FALLBACK_REASON_REFUSAL)
     return {str(key): value for key, value in answer.items()}
 
 
@@ -225,7 +231,7 @@ def _choice_value(answer: dict[str, object]) -> str:
 
 
 def _score_value(answer: dict[str, object]) -> float:
-    """Read the score answer, accepting numbers and string-encoded numbers."""
+    """Read a 0-indexed score answer (numbers or numeric strings) as a 1..5 score."""
     score = answer.get("score")
     value = _plain_number(score)
     if value is None and isinstance(score, str):
@@ -233,9 +239,16 @@ def _score_value(answer: dict[str, object]) -> float:
             value = float(score)
         except ValueError:
             value = None
-    if value is None or not _MIN_SCORE <= value <= _MAX_SCORE:
+    if value is None or not _MIN_RAW_SCORE <= value <= _MAX_RAW_SCORE:
         raise _DecisionFailure(_FALLBACK_REASON_INVALID)
-    return value
+    return value + _SCORE_OFFSET
+
+
+def _usage_cost(body: dict[str, object]) -> float | None:
+    """Return the credits Jev charged, or None when absent or unusable."""
+    usage = body.get("usage")
+    cost = _plain_number(usage.get("cost")) if isinstance(usage, dict) else None
+    return cost if cost is not None and cost >= 0.0 else None
 
 
 def _confidence_values(answers: dict[str, object]) -> list[float]:
