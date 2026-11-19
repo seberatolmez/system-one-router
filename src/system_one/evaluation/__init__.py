@@ -2,11 +2,12 @@
 
 from system_one.evaluation.dataset import DatasetFormatError, EvaluationDataset, EvaluationItem
 from system_one.evaluation.runner import BenchmarkResult, run_benchmark
-from system_one.evaluation.strategy import OrchestratorStrategy, StrategyOutcome
+from system_one.evaluation.strategy import DecisionStrategy, OrchestratorStrategy, StrategyOutcome
 
 __all__ = [
     "BenchmarkResult",
     "DatasetFormatError",
+    "DecisionStrategy",
     "EvaluationDataset",
     "EvaluationItem",
     "OrchestratorStrategy",

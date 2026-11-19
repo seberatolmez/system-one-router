@@ -72,3 +72,19 @@ accuracy against optional `expected_tier` labels, measured cost, latency,
 error rate, and escalation rate. Missing token usage or pricing is left
 unmeasured rather than reported as zero. Quality scoring and benchmark claims
 are intentionally not included in this framework milestone.
+
+### Comparing decision models
+
+`--decision-model` benchmarks decision models on routing decisions only (decide,
+then policy; no completion is requested, so a run costs cents). Any model that
+speaks the OpenRouter Decisions API works, and it cannot be combined with
+`--strategy`:
+
+```text
+uv run python -m system_one.evaluation.cli --dataset evaluations/datasets/sample.jsonl --decision-model typesafe/jev-1.14 --decision-model google/gemini-decision-1 --output-dir evaluations/reports
+```
+
+The report adds `under_routing_rate` (routed below the expected tier),
+`brier_score` (confidence calibration against tier correctness, lower is better),
+and `decision_cost_per_1000_requests`. A fallback decision counts as an error and
+is excluded from accuracy and calibration.
