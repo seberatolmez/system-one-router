@@ -1,6 +1,7 @@
 # Default System One Router model pool.
 # Tiers map to Jev routing tiers; registration order is the deterministic
 # tie-break when a tier contains multiple profiles.
+# Prices are USD per million tokens, taken from the OpenRouter models API (Nov 2026).
 models:
   fast:
     - id: google/gemini-2.5-flash
@@ -14,23 +15,23 @@ models:
         output_per_million: 2.5
 
   balanced:
-    - id: anthropic/claude-3.5-haiku
+    - id: openai/gpt-6.1-terra
       provider: openrouter
       capabilities:
         reasoning: 3
         coding: 4
-        vision: false
+        vision: true
       cost:
-        input_per_million: 0.8
-        output_per_million: 4.0
+        input_per_million: 1.0
+        output_per_million: 5.0
 
   reasoning:
-    - id: anthropic/claude-sonnet-4
+    - id: anthropic/claude-sonnet-5.5
       provider: openrouter
       capabilities:
         reasoning: 5
         coding: 5
-        vision: false
+        vision: true
       cost:
-        input_per_million: 3.0
-        output_per_million: 15.0
+        input_per_million: 2.0
+        output_per_million: 10.0

@@ -1,4 +1,4 @@
-"""Tests for validated model registry loading."""
+﻿"""Tests for validated model registry loading."""
 
 import pytest
 
@@ -13,8 +13,8 @@ def test_default_registry_file_loads_all_tiers() -> None:
     registry = load_model_registry("registry/models.yaml")
 
     assert registry.select("fast").id == "google/gemini-2.5-flash"
-    assert registry.select("balanced").id == "anthropic/claude-3.5-haiku"
-    assert registry.select("reasoning").id == "anthropic/claude-sonnet-4"
+    assert registry.select("balanced").id == "openai/gpt-6.1-terra"
+    assert registry.select("reasoning").id == "anthropic/claude-sonnet-5.5"
     assert registry.select("fast").provider == "openrouter"
 
 
