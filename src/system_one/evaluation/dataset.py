@@ -80,6 +80,25 @@ def load_dataset(path: str | Path) -> EvaluationDataset:
     return EvaluationDataset(name=dataset_path.stem, items=tuple(items))
 
 
+def write_dataset(dataset: EvaluationDataset, path: str | Path) -> None:
+    """Write a dataset as JSONL that ``load_dataset`` reads back unchanged."""
+    lines = []
+    for item in dataset.items:
+        record: dict[str, object] = {
+            "id": item.id,
+            "task_type": item.task_type,
+            "difficulty": item.difficulty,
+            "expected_tier": item.expected_tier,
+            "source": item.source,
+            "license": item.license,
+            "reference": item.reference,
+            "messages": [{"role": m.role, "content": m.content} for m in item.messages],
+        }
+        present = {key: value for key, value in record.items() if value is not None}
+        lines.append(json.dumps(present, ensure_ascii=False))
+    Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+
 def _parse_item(document: object, path: Path, line_number: int) -> EvaluationItem:
     if not isinstance(document, dict):
         raise _invalid_item(path, line_number, "each JSONL record must be an object")

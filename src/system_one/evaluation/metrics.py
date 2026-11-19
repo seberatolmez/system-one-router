@@ -234,6 +234,45 @@ class DecisionCostPer1000Metric:
         return MetricResult(self.name, value, "cost units/1000 requests", len(costs))
 
 
+@dataclass(frozen=True)
+class QualityPassRateMetric:
+    """Fraction of graded requests that passed; errored requests count as failed."""
+
+    name: str = "quality_pass_rate"
+
+    def calculate(
+        self,
+        dataset: EvaluationDataset,
+        outcomes: Sequence[StrategyOutcome],
+    ) -> MetricResult:
+        del dataset
+        graded = [o.quality_passed for o in outcomes if o.quality_passed is not None]
+        value = sum(graded) / len(graded) if graded else None
+        return MetricResult(self.name, value, "fraction", len(graded))
+
+
+@dataclass(frozen=True)
+class CostPerSuccessfulTaskMetric:
+    """Measured spend divided by passed tasks, over requests with both cost and a verdict."""
+
+    name: str = "cost_per_successful_task"
+
+    def calculate(
+        self,
+        dataset: EvaluationDataset,
+        outcomes: Sequence[StrategyOutcome],
+    ) -> MetricResult:
+        del dataset
+        measured = [
+            (o.estimated_cost, o.quality_passed)
+            for o in outcomes
+            if o.estimated_cost is not None and o.quality_passed is not None
+        ]
+        passes = sum(passed for _, passed in measured)
+        value = sum(cost for cost, _ in measured) / passes if passes else None
+        return MetricResult(self.name, value, "cost units/passed task", len(measured))
+
+
 def _labeled_routed(
     expected: dict[str, RoutingTier | None],
     outcomes: Sequence[StrategyOutcome],
@@ -254,6 +293,8 @@ DEFAULT_METRICS: tuple[EvaluationMetric, ...] = (
     LatencyPercentileMetric(95),
     ErrorRateMetric(),
     EscalationRateMetric(),
+    QualityPassRateMetric(),
+    CostPerSuccessfulTaskMetric(),
 )
 
 DECISION_METRICS: tuple[EvaluationMetric, ...] = (
