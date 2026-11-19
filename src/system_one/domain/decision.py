@@ -30,9 +30,12 @@ class Decision:
     confidence: float
     decision_source: str = "internal"
     fallback_reason: str | None = None
+    cost: float | None = None
 
     def __post_init__(self) -> None:
         """Validate value ranges on construction."""
+        if self.cost is not None and self.cost < 0.0:
+            raise ValueError("cost must not be negative")
         if not self.task_type or not self.task_type.strip():
             raise ValueError("task_type must not be empty")
         if not self.decision_source or not self.decision_source.strip():
