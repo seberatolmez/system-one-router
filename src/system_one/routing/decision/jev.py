@@ -137,19 +137,17 @@ class JevDecisionEngine:
     def _map_decision(self, body: dict[str, object]) -> Decision:
         answers = self._answers(body)
         task_type = _choice_value(_answer(answers, "task_type"))
-        complexity = _score_value(_answer(answers, "complexity"))
+        complexity_answer = _answer(answers, "complexity")
+        complexity = _score_value(complexity_answer)
         quality_requirement = _score_value(_answer(answers, "quality_requirement"))
         latency_requirement = _score_value(_answer(answers, "latency_requirement"))
-        confidences = _confidence_values(answers)
-        if not confidences:
-            raise _DecisionFailure(_FALLBACK_REASON_INVALID)
 
         return Decision(
             task_type=task_type,
             complexity=complexity,
             quality_requirement=quality_requirement,
             latency_requirement=latency_requirement,
-            confidence=min(confidences),
+            confidence=_confidence_value(complexity_answer),
             decision_source="jev",
             cost=_usage_cost(body),
         )
@@ -251,20 +249,16 @@ def _usage_cost(body: dict[str, object]) -> float | None:
     return cost if cost is not None and cost >= 0.0 else None
 
 
-def _confidence_values(answers: dict[str, object]) -> list[float]:
-    """Collect trust values: explicit confidence, else the noul probability."""
-    values: list[float] = []
-    for answer in answers.values():
-        if not isinstance(answer, dict):
-            continue
-        value = _plain_number(answer.get("confidence"))
-        if value is None and answer.get("type") == "noul":
-            value = _plain_number(answer.get("noul"))
-        if value is not None:
-            if not 0.0 <= value <= 1.0:
-                raise _DecisionFailure(_FALLBACK_REASON_INVALID)
-            values.append(value)
-    return values
+def _confidence_value(answer: dict[str, object]) -> float:
+    """Read the confidence of the answer the policy routes on (complexity).
+
+    Only complexity drives the tier, so an unsure answer to an unused question
+    (e.g. latency) must not push every request to the fallback tier.
+    """
+    value = _plain_number(answer.get("confidence"))
+    if value is None or not 0.0 <= value <= 1.0:
+        raise _DecisionFailure(_FALLBACK_REASON_INVALID)
+    return value
 
 
 def _plain_number(value: object) -> float | None:

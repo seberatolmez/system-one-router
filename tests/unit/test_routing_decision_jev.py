@@ -98,40 +98,33 @@ async def test_valid_response_maps_to_typed_decision() -> None:
     assert decision.complexity == 3.5
     assert decision.quality_requirement == 4.25
     assert decision.latency_requirement == 1.75
-    assert decision.confidence == 0.67
+    assert decision.confidence == 0.91
     assert decision.decision_source == "jev"
     assert decision.fallback_reason is None
 
 
-async def test_confidence_is_minimum_across_answers() -> None:
+async def test_confidence_comes_from_complexity_not_unused_answers() -> None:
     def handler(_: httpx.Request) -> httpx.Response:
-        body = valid_body(style={"type": "noul", "noul": 0.42})
-        return httpx.Response(200, json=body)
+        unsure = {"type": "score", "score": 1.0, "confidence": 0.0}
+        return httpx.Response(200, json=valid_body(latency_requirement=unsure))
 
     engine = make_engine(httpx.MockTransport(handler))
 
     decision = await engine.decide(make_request())
 
-    assert decision.confidence == 0.42
+    assert decision.confidence == 0.91
+    assert decision.decision_source == "jev"
 
 
-async def test_answer_without_confidence_is_skipped_for_minimum() -> None:
+@pytest.mark.parametrize("confidence", [None, 1.3, -0.1, "0.9", True])
+async def test_missing_or_invalid_complexity_confidence_is_invalid_response(
+    confidence: object,
+) -> None:
     def handler(_: httpx.Request) -> httpx.Response:
-        body = valid_body(complexity={"type": "score", "score": 1.0})
-        return httpx.Response(200, json=body)
-
-    engine = make_engine(httpx.MockTransport(handler))
-
-    decision = await engine.decide(make_request())
-
-    assert decision.complexity == 2.0
-    assert decision.confidence == 0.67
-
-
-async def test_out_of_range_confidence_is_invalid_response() -> None:
-    def handler(_: httpx.Request) -> httpx.Response:
-        body = valid_body(style={"type": "noul", "noul": 1.3})
-        return httpx.Response(200, json=body)
+        answer: dict[str, object] = {"type": "score", "score": 1.0}
+        if confidence is not None:
+            answer["confidence"] = confidence
+        return httpx.Response(200, json=valid_body(complexity=answer))
 
     engine = make_engine(httpx.MockTransport(handler))
 
