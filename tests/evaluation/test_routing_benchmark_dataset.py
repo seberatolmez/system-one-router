@@ -59,6 +59,21 @@ def test_routing_benchmark_dataset_is_balanced_and_fully_attributed() -> None:
         assert all(message.content.strip() for message in item.messages)
 
 
+def test_60_item_subset_is_the_first_four_items_of_each_cell() -> None:
+    full = load_dataset("evaluations/datasets/routing-benchmark.jsonl")
+    subset = load_dataset("evaluations/datasets/routing-benchmark-60.jsonl")
+
+    taken: Counter[tuple[str | None, str | None]] = Counter()
+    expected = []
+    for item in full.items:
+        key = (item.task_type, item.difficulty)
+        if taken[key] < 4:
+            taken[key] += 1
+            expected.append(item)
+    assert subset.items == tuple(expected)
+    assert len(subset.items) == 60
+
+
 def test_routing_benchmark_references_are_checkable_answers() -> None:
     dataset = load_dataset("evaluations/datasets/routing-benchmark.jsonl")
     referenced = [item for item in dataset.items if item.reference is not None]
