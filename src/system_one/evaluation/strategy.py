@@ -40,6 +40,7 @@ class StrategyOutcome:
     decision_cost: float | None = None
     response_text: str | None = None
     quality_passed: bool | None = None
+    decision_complexity: float | None = None
 
 
 class BenchmarkStrategy(Protocol):
@@ -191,6 +192,7 @@ class DecisionStrategy:
             error_type=decision.fallback_reason,
             decision_source=decision.decision_source,
             decision_cost=decision.cost,
+            decision_complexity=None if failed else decision.complexity,
         )
 
 

@@ -191,6 +191,51 @@ async def test_replay_scores_baselines_and_decision_models_on_identical_answers(
     assert [o.tier for o in heuristic] == ["fast", "fast", "fast"]
 
 
+async def test_replay_reroutes_recorded_decisions_with_the_given_policy() -> None:
+    # complexity 5.0 at low confidence: gated -> fallback (balanced), ungated -> reasoning
+    decisions = {
+        "m": {
+            item_id: _outcome(
+                "m",
+                item_id,
+                tier="balanced",
+                decision_complexity=5.0,
+                decision_confidence=0.5,
+            )
+            for item_id in VERDICTS
+        }
+    }
+    ungated = DeterministicPolicyEngine(
+        PolicyConfig(
+            confidence_threshold=0.0,
+            tiers={
+                "fast": ComplexityRange(min_complexity=1.0, max_complexity=2.5),
+                "balanced": ComplexityRange(min_complexity=2.5, max_complexity=4.5),
+                "reasoning": ComplexityRange(min_complexity=4.5, max_complexity=5.0),
+            },
+        )
+    )
+
+    gated_result = await replay(_dataset(), _tiers(), decisions, _policy(), "balanced")
+    ungated_result = await replay(_dataset(), _tiers(), decisions, ungated, "balanced")
+
+    def tiers_of(result: object) -> list[RoutingTier | None]:
+        strategy = next(s for s in result.strategies if s.name == "m")  # type: ignore[attr-defined]
+        return [o.tier for o in strategy.outcomes]
+
+    assert tiers_of(gated_result) == ["balanced"] * 3
+    assert tiers_of(ungated_result) == ["reasoning"] * 3
+
+
+def test_ungated_evaluation_policy_loads() -> None:
+    from system_one.routing.policy import load_policy_config
+
+    config = load_policy_config("evaluations/policies/ungated.yaml")
+
+    assert config.confidence_threshold == 0.0
+    assert config.fallback_tier == "balanced"
+
+
 async def test_replay_rejects_incomplete_reports() -> None:
     tiers = _tiers()
     del tiers["system-one/reasoning"]["hard"]

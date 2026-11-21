@@ -143,6 +143,22 @@ async def heuristic_tiers(
     return tiers
 
 
+def _replayed_tier(
+    decision: StrategyOutcome, policy: DeterministicPolicyEngine, fallback_tier: RoutingTier
+) -> RoutingTier:
+    """Re-run the replay policy on the recorded decision; a failed one gets the fallback tier."""
+    if decision.decision_complexity is None or decision.decision_confidence is None:
+        return decision.tier or fallback_tier
+    recorded = Decision(
+        task_type="recorded",
+        complexity=decision.decision_complexity,
+        quality_requirement=3.0,
+        latency_requirement=3.0,
+        confidence=decision.decision_confidence,
+    )
+    return policy.evaluate(recorded).tier
+
+
 async def replay(
     dataset: EvaluationDataset,
     tiers: Outcomes,
@@ -179,8 +195,7 @@ async def replay(
             decision = by_item.get(item.id)
             if decision is None:
                 raise ValueError(f"decision report for {model!r} lacks item {item.id!r}")
-            # A failed decision routes to the policy's fallback tier, as in production.
-            choices[item.id] = (decision.tier or fallback_tier, decision)
+            choices[item.id] = (_replayed_tier(decision, policy, fallback_tier), decision)
         results.append(replay_router(model, choices, tiers, labeled))
 
     now = datetime.now(UTC)
@@ -200,10 +215,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--tier-report", type=Path, required=True)
     parser.add_argument("--decision-report", type=Path)
     parser.add_argument("--output-dir", type=Path, default=Path("evaluations/reports"))
+    parser.add_argument(
+        "--policy",
+        type=Path,
+        help="policy file to route recorded decisions with (default: the configured policy)",
+    )
     args = parser.parse_args(argv)
 
-    settings = get_settings()
-    config = load_policy_config(settings.policy_file)
+    config = load_policy_config(args.policy or get_settings().policy_file)
     dataset = load_dataset(args.dataset)
     decisions = load_outcomes(args.decision_report) if args.decision_report else {}
     result = asyncio.run(
