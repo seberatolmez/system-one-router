@@ -158,6 +158,7 @@ async def test_replay_scores_baselines_and_decision_models_on_identical_answers(
 
     assert [s.name for s in result.strategies] == [
         "always-fast",
+        "always-balanced",
         "always-strong",
         "heuristic",
         "perfect/model",

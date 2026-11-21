@@ -180,6 +180,9 @@ async def replay(
     results = [
         replay_router("always-fast", {i.id: ("fast", None) for i in labeled.items}, tiers, labeled),
         replay_router(
+            "always-balanced", {i.id: ("balanced", None) for i in labeled.items}, tiers, labeled
+        ),
+        replay_router(
             "always-strong", {i.id: ("reasoning", None) for i in labeled.items}, tiers, labeled
         ),
     ]
