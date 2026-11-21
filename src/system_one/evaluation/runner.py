@@ -1,5 +1,6 @@
 """Run a dataset through the same set of strategies and collect comparable results."""
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -9,6 +10,8 @@ from system_one.evaluation.dataset import EvaluationDataset, EvaluationItem
 from system_one.evaluation.grading import QualityGrader
 from system_one.evaluation.metrics import DEFAULT_METRICS, EvaluationMetric, MetricResult
 from system_one.evaluation.strategy import BenchmarkStrategy, StrategyOutcome
+
+_logger = logging.getLogger("system_one.evaluation")
 
 
 @dataclass(frozen=True)
@@ -103,6 +106,17 @@ async def run_benchmark(
             if grader is not None:
                 outcome = await _grade(grader, item, outcome)
             outcomes.append(replace(outcome, response_text=None))
+            _logger.info(
+                "%s %d/%d %s tier=%s %.0fms error=%s passed=%s",
+                strategy.name,
+                len(outcomes),
+                len(dataset.items),
+                item.id,
+                outcome.tier,
+                (perf_counter() - started_at) * 1000,
+                outcome.error_type,
+                outcome.quality_passed,
+            )
 
         immutable_outcomes = tuple(outcomes)
         metric_results = tuple(
