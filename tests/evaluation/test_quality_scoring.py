@@ -43,6 +43,8 @@ _TIERS: tuple[RoutingTier, ...] = ("fast", "balanced", "reasoning")
         ("C", "A is tempting but the answer is: C", True),
         ("C", "B", False),
         ("C", "A cat sat on a mat", False),
+        ("C", "answer" + " " * 5000 + "!", False),
+        ("C", "answer is " + "(" * 50 + "C", False),
         ("Paris", " paris ", True),
         ("Paris", "London", False),
     ],
@@ -290,10 +292,50 @@ async def test_oracle_labels_cheapest_passing_tier_and_leaves_doubtful_items_unl
         await measure_expected_tiers(dataset, strategies[:2], TextGrader())
 
 
-def test_write_dataset_round_trips_through_the_loader(tmp_path: Path) -> None:
+def test_write_dataset_round_trips_through_the_loader(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     original = load_dataset("evaluations/datasets/routing-benchmark.jsonl")
-    path = tmp_path / "copy.jsonl"
+    monkeypatch.chdir(tmp_path)
 
-    write_dataset(original, path)
+    write_dataset(original, "copy.jsonl")
 
-    assert load_dataset(path).items == original.items
+    assert load_dataset("copy.jsonl").items == original.items
+
+
+def test_write_dataset_refuses_paths_outside_the_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    dataset = EvaluationDataset("d", (EvaluationItem("a", (), None),))
+
+    with pytest.raises(ValueError, match="outside the working directory"):
+        write_dataset(dataset, tmp_path / "escaped.jsonl")
+    with pytest.raises(ValueError, match="outside the working directory"):
+        write_dataset(dataset, "../escaped.jsonl")
+    assert not (tmp_path / "escaped.jsonl").exists()
+
+
+async def test_judge_failure_leaves_the_verdict_unmeasured_and_is_logged(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class BrokenProvider(JudgeProvider):
+        async def chat(self, request: CompletionRequest) -> CompletionResponse:
+            raise RuntimeError("judge down")
+
+    dataset = EvaluationDataset("d", (EvaluationItem("a", (), None),))
+    scripts = {"a": _outcome("a", text="an answer")}
+    grader = ReferenceOrJudgeGrader(BrokenProvider(None), "judge/model")
+
+    with caplog.at_level("WARNING", logger="system_one.evaluation"):
+        result = await run_benchmark(
+            dataset,
+            (ScriptedStrategy("one", scripts), ScriptedStrategy("two", scripts)),
+            metrics=(),
+            grader=grader,
+        )
+
+    assert result.strategies[0].outcomes[0].quality_passed is None
+    assert "grading a failed" in caplog.text
