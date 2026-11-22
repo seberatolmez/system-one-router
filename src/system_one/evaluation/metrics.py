@@ -174,6 +174,79 @@ def _is_escalation(
     )
 
 
+@dataclass(frozen=True)
+class UnderRoutingRateMetric:
+    """Fraction of labeled requests routed below the expected tier (a quality risk)."""
+
+    name: str = "under_routing_rate"
+
+    def calculate(
+        self,
+        dataset: EvaluationDataset,
+        outcomes: Sequence[StrategyOutcome],
+    ) -> MetricResult:
+        expected = {item.id: item.expected_tier for item in dataset.items}
+        comparable = _labeled_routed(expected, outcomes)
+        under = sum(_TIER_RANK[selected] < _TIER_RANK[wanted] for selected, wanted, _ in comparable)
+        value = under / len(comparable) if comparable else None
+        return MetricResult(self.name, value, "fraction", len(comparable))
+
+
+@dataclass(frozen=True)
+class BrierScoreMetric:
+    """Mean squared gap between decision confidence and routing correctness (lower is better).
+
+    Confidence is the decision's minimum answer confidence, the value the policy
+    engine thresholds on; correctness is an exact match with the expected tier.
+    """
+
+    name: str = "brier_score"
+
+    def calculate(
+        self,
+        dataset: EvaluationDataset,
+        outcomes: Sequence[StrategyOutcome],
+    ) -> MetricResult:
+        expected = {item.id: item.expected_tier for item in dataset.items}
+        pairs = [
+            (outcome.decision_confidence, float(selected == wanted))
+            for selected, wanted, outcome in _labeled_routed(expected, outcomes)
+            if outcome.decision_confidence is not None
+        ]
+        value = sum((conf - hit) ** 2 for conf, hit in pairs) / len(pairs) if pairs else None
+        return MetricResult(self.name, value, "squared error", len(pairs))
+
+
+@dataclass(frozen=True)
+class DecisionCostPer1000Metric:
+    """Mean measured decision-engine cost, scaled to 1,000 requests."""
+
+    name: str = "decision_cost_per_1000_requests"
+
+    def calculate(
+        self,
+        dataset: EvaluationDataset,
+        outcomes: Sequence[StrategyOutcome],
+    ) -> MetricResult:
+        del dataset
+        costs = [o.decision_cost for o in outcomes if o.decision_cost is not None]
+        value = sum(costs) / len(costs) * 1000 if costs else None
+        return MetricResult(self.name, value, "cost units/1000 requests", len(costs))
+
+
+def _labeled_routed(
+    expected: dict[str, RoutingTier | None],
+    outcomes: Sequence[StrategyOutcome],
+) -> list[tuple[RoutingTier, RoutingTier, StrategyOutcome]]:
+    """Return (selected, expected, outcome), skipping unlabeled or unrouted items."""
+    pairs: list[tuple[RoutingTier, RoutingTier, StrategyOutcome]] = []
+    for outcome in outcomes:
+        expected_tier = expected.get(outcome.item_id)
+        if expected_tier is not None and outcome.tier is not None:
+            pairs.append((outcome.tier, expected_tier, outcome))
+    return pairs
+
+
 DEFAULT_METRICS: tuple[EvaluationMetric, ...] = (
     RoutingAccuracyMetric(),
     AverageCostPerRequestMetric(),
@@ -181,4 +254,15 @@ DEFAULT_METRICS: tuple[EvaluationMetric, ...] = (
     LatencyPercentileMetric(95),
     ErrorRateMetric(),
     EscalationRateMetric(),
+)
+
+DECISION_METRICS: tuple[EvaluationMetric, ...] = (
+    RoutingAccuracyMetric(),
+    UnderRoutingRateMetric(),
+    EscalationRateMetric(),
+    BrierScoreMetric(),
+    DecisionCostPer1000Metric(),
+    LatencyPercentileMetric(50),
+    LatencyPercentileMetric(95),
+    ErrorRateMetric(),
 )

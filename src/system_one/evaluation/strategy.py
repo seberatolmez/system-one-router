@@ -5,14 +5,16 @@ from time import perf_counter
 from typing import Protocol
 
 from system_one.domain.completions import CompletionRequest, StreamingCompletionResponse
-from system_one.domain.decision import RoutingTier
+from system_one.domain.decision import Decision, RoutingRequest, RoutingTier
 from system_one.evaluation.dataset import EvaluationItem
 from system_one.providers.errors import ProviderConfigurationError
+from system_one.routing.decision.base import DecisionEngine
 from system_one.routing.orchestrator import (
     RoutingExecutionError,
     RoutingOrchestrator,
     RoutingOutcome,
 )
+from system_one.routing.policy.engine import DeterministicPolicyEngine
 from system_one.telemetry import estimate_cost, extract_token_usage
 
 
@@ -34,6 +36,8 @@ class StrategyOutcome:
     decision_confidence: float | None
     status_code: int | None
     error_type: str | None
+    decision_source: str | None = None
+    decision_cost: float | None = None
 
 
 class BenchmarkStrategy(Protocol):
@@ -143,7 +147,56 @@ class OrchestratorStrategy:
             ),
             status_code=response.status_code,
             error_type=error_type,
+            decision_source=_decision_source(routed_outcome.decision),
+            decision_cost=_decision_cost(routed_outcome.decision),
         )
+
+
+@dataclass(frozen=True)
+class DecisionStrategy:
+    """Measure only a decision engine and the policy; no completion is requested.
+
+    A fallback decision is reported as an error with no tier, so it is excluded
+    from accuracy and calibration and visible in the error rate instead.
+    """
+
+    name: str
+    engine: DecisionEngine
+    policy_engine: DeterministicPolicyEngine
+
+    async def run(self, item: EvaluationItem) -> StrategyOutcome:
+        started_at = perf_counter()
+        decision = await self.engine.decide(
+            RoutingRequest(model=self.name, messages=item.messages)
+        )
+        elapsed_ms = (perf_counter() - started_at) * 1000
+        failed = decision.fallback_reason is not None
+        return StrategyOutcome(
+            item_id=item.id,
+            strategy_name=self.name,
+            model_requested=self.name,
+            model_selected=None,
+            tier=None if failed else self.policy_engine.evaluate(decision).tier,
+            latency_ms=elapsed_ms,
+            routing_latency_ms=elapsed_ms,
+            provider_latency_ms=0.0,
+            input_tokens=None,
+            output_tokens=None,
+            estimated_cost=None,
+            decision_confidence=None if failed else decision.confidence,
+            status_code=None,
+            error_type=decision.fallback_reason,
+            decision_source=decision.decision_source,
+            decision_cost=decision.cost,
+        )
+
+
+def _decision_source(decision: Decision | None) -> str | None:
+    return decision.decision_source if decision is not None else None
+
+
+def _decision_cost(decision: Decision | None) -> float | None:
+    return decision.cost if decision is not None else None
 
 
 def _from_routing_outcome(
@@ -172,6 +225,8 @@ def _from_routing_outcome(
         ),
         status_code=status_code,
         error_type=error_type,
+        decision_source=_decision_source(outcome.decision),
+        decision_cost=_decision_cost(outcome.decision),
     )
 
 

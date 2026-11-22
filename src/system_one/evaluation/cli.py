@@ -5,11 +5,18 @@ import asyncio
 from collections.abc import Sequence
 from pathlib import Path
 
+import httpx
+
 from system_one.core.config import Settings, get_settings
 from system_one.evaluation.dataset import load_dataset
+from system_one.evaluation.metrics import DECISION_METRICS, DEFAULT_METRICS
 from system_one.evaluation.reporting import write_reports
 from system_one.evaluation.runner import run_benchmark
-from system_one.evaluation.strategy import OrchestratorStrategy
+from system_one.evaluation.strategy import (
+    BenchmarkStrategy,
+    DecisionStrategy,
+    OrchestratorStrategy,
+)
 from system_one.providers.openrouter import OpenRouterProvider
 from system_one.routing.decision import InternalDecisionEngine, JevDecisionEngine
 from system_one.routing.orchestrator import VIRTUAL_MODEL_NAMES, RoutingOrchestrator
@@ -47,11 +54,33 @@ def build_live_strategies(
     )
 
 
+def build_decision_strategies(
+    model_slugs: Sequence[str],
+    settings: Settings,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> tuple[DecisionStrategy, ...]:
+    """Build one decision-only strategy per decision-model slug, sharing one policy."""
+    policy_engine = DeterministicPolicyEngine(load_policy_config(settings.policy_file))
+    return tuple(
+        DecisionStrategy(
+            name=slug,
+            engine=JevDecisionEngine(settings.model_copy(update={"jev_model": slug}), transport),
+            policy_engine=policy_engine,
+        )
+        for slug in model_slugs
+    )
+
+
 async def _run(args: argparse.Namespace) -> tuple[Path, Path]:
     settings = get_settings()
     dataset = load_dataset(args.dataset)
-    strategies = build_live_strategies(args.strategy, settings)
-    result = await run_benchmark(dataset, strategies)
+    strategies: Sequence[BenchmarkStrategy]
+    if args.decision_model:
+        strategies = build_decision_strategies(args.decision_model, settings)
+        result = await run_benchmark(dataset, strategies, DECISION_METRICS)
+    else:
+        strategies = build_live_strategies(args.strategy, settings)
+        result = await run_benchmark(dataset, strategies, DEFAULT_METRICS)
     return write_reports(result, args.output_dir)
 
 
@@ -76,17 +105,35 @@ def main(argv: Sequence[str] | None = None) -> None:
         ),
     )
     parser.add_argument(
+        "--decision-model",
+        action="append",
+        help=(
+            "decision-model slug to benchmark on routing decisions only, e.g. "
+            "typesafe/jev-1.14; repeat this option. Cannot be combined with --strategy."
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("evaluations/reports"),
         help="directory for JSON runs and summary.md (default: %(default)s)",
     )
     args = parser.parse_args(argv)
-    args.strategy = args.strategy or list(_DEFAULT_STRATEGIES)
-    if len(args.strategy) < 2:
-        parser.error("at least two --strategy options are required for comparison")
-    if len(args.strategy) != len(set(args.strategy)):
-        parser.error("--strategy values must be unique")
+    if args.decision_model:
+        if args.strategy:
+            parser.error("--decision-model cannot be combined with --strategy")
+        if len(args.decision_model) < 2:
+            parser.error("at least two --decision-model options are required for comparison")
+        if len(args.decision_model) != len(set(args.decision_model)):
+            parser.error("--decision-model values must be unique")
+        if not get_settings().openrouter_api_key:
+            parser.error("OPENROUTER_API_KEY is required to benchmark decision models")
+    else:
+        args.strategy = args.strategy or list(_DEFAULT_STRATEGIES)
+        if len(args.strategy) < 2:
+            parser.error("at least two --strategy options are required for comparison")
+        if len(args.strategy) != len(set(args.strategy)):
+            parser.error("--strategy values must be unique")
 
     json_path, markdown_path = asyncio.run(_run(args))
     print(f"Wrote JSON results: {json_path}")
