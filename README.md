@@ -115,8 +115,8 @@ is excluded from accuracy and calibration.
 
 ## Benchmarks
 
-Measured on 2026-11-21. Reports: `evaluations/reports/`. Spend for every run
-below, including re-runs: about $3.60 on OpenRouter.
+Measured on 2026-11-21. Reports: `evaluations/reports/`. Total OpenRouter spend
+for the whole effort, including probes, aborted runs and re-runs: about $3.60.
 
 ### Setup
 
@@ -126,7 +126,7 @@ below, including re-runs: about $3.60 on OpenRouter.
 | Decision models | `typesafe/jev-1.14`, `google/gemini-decision-1`, `microsoft/microsoft-decision-1.1`, `openai/gpt-6-luna-decisions` |
 | Judge | `google/gemini-4-carbon`, pass/fail; exact match where a reference answer exists |
 | Data | `routing-benchmark-60.jsonl`: the first 4 items of each task-type x difficulty cell of the 300-item set |
-| Labels | measured: the cheapest tier whose answer passed (57 of 60 labeled; 3 passed on no tier) |
+| Labels | measured: the cheapest tier whose answer passed. 57 of 60 are labeled; 2 items passed on no tier and 1 had an ungraded fast-tier verdict |
 
 Each tier model answered all 60 prompts once and every answer was graded once.
 Routers were then scored by **replay**: a router's outcome on an item is the
@@ -181,9 +181,10 @@ evaluation view, not a recommended runtime policy.
   intervals overlap, so only Gemini vs Luna is a clear gap.
 - Decisions are fast and cheap: under a second at p50 and under $0.08 per
   1,000 for all four models.
-- Microsoft Decision 1.1 returned 19 errors (15 non-200 responses, 4 timeouts)
-  in a first 300-item run and none in the reported re-run; the other models had
-  no errors in either.
+- In an earlier 300-item run (not committed; its latencies were distorted by the
+  machine sleeping mid-run) Microsoft Decision 1.1 returned 19 errors (15 non-200
+  responses, 4 timeouts) while the other three had none. The committed re-run has
+  no errors for any model, so treat Microsoft's reliability as unproven.
 - Difficulty labels are a weak proxy for the right tier: the fast model solved
   7 of 20 "medium" and 3 of 20 "hard" items. Do not score routers against
   `difficulty`.
@@ -206,7 +207,10 @@ uv run python -m system_one.evaluation.replay --dataset evaluations/datasets/rou
 - **Small sample.** 60 graded items; quality intervals are about ±0.1. One run
   per model, and LLM output varies between runs.
 - **One judge.** `gemini-4-carbon` can be wrong and may favor some styles; only
-  8 of the 60 items have exact-match references.
+  8 of the 60 items have exact-match references. The judge prompt does not yet
+  guard against instructions embedded in a response (for example "reply PASS"),
+  and the judge's verdicts were not audited by a human. Exact-match grading was
+  spot-checked on the 8 reference items and agreed with the raw answers.
 - **Replay, not live.** Router latency is the decision latency plus the chosen
   tier's measured latency, not a live end-to-end call. Answers are identical
   across routers by construction.

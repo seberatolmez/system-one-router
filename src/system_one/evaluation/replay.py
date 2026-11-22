@@ -22,7 +22,7 @@ from pathlib import Path
 
 from system_one.core.config import get_settings
 from system_one.domain.decision import Decision, RoutingRequest, RoutingTier
-from system_one.evaluation.dataset import EvaluationDataset, load_dataset
+from system_one.evaluation.dataset import EvaluationDataset, load_dataset, resolve_in_workspace
 from system_one.evaluation.metrics import (
     BrierScoreMetric,
     CostPerSuccessfulTaskMetric,
@@ -64,7 +64,7 @@ Outcomes = dict[str, dict[str, StrategyOutcome]]
 
 def load_outcomes(path: str | Path) -> Outcomes:
     """Read a report JSON into ``{strategy: {item_id: outcome}}``."""
-    document = json.loads(Path(path).read_text(encoding="utf-8"))
+    document = json.loads(resolve_in_workspace(path).read_text(encoding="utf-8"))
     names = {field.name for field in fields(StrategyOutcome)}
     return {
         strategy["name"]: {

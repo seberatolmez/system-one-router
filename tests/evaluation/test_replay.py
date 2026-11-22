@@ -248,7 +248,9 @@ async def test_replay_rejects_incomplete_reports() -> None:
         await replay(_dataset(), _tiers(), partial, _policy(), "balanced")
 
 
-def test_load_outcomes_reads_a_written_report(tmp_path: Path) -> None:
+def test_load_outcomes_reads_a_written_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tiers = _tiers()
     document = {
         "strategies": [
@@ -256,7 +258,19 @@ def test_load_outcomes_reads_a_written_report(tmp_path: Path) -> None:
             for name, by_item in tiers.items()
         ]
     }
-    path = tmp_path / "report.json"
-    path.write_text(json.dumps(document), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    Path("report.json").write_text(json.dumps(document), encoding="utf-8")
 
-    assert load_outcomes(path) == tiers
+    assert load_outcomes("report.json") == tiers
+
+
+def test_load_outcomes_refuses_paths_outside_the_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (tmp_path / "secret.json").write_text("{}", encoding="utf-8")
+    monkeypatch.chdir(workspace)
+
+    with pytest.raises(ValueError, match="outside the working directory"):
+        load_outcomes("../secret.json")
