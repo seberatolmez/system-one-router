@@ -74,6 +74,18 @@ def test_60_item_subset_is_the_first_four_items_of_each_cell() -> None:
     assert len(subset.items) == 60
 
 
+def test_240_item_set_is_the_exact_complement_of_the_60_item_subset() -> None:
+    full = load_dataset("evaluations/datasets/routing-benchmark.jsonl")
+    subset = load_dataset("evaluations/datasets/routing-benchmark-60.jsonl")
+    rest = load_dataset("evaluations/datasets/routing-benchmark-240.jsonl")
+
+    assert len(rest.items) == 240
+    assert {item.id for item in rest.items}.isdisjoint(item.id for item in subset.items)
+    assert [item.id for item in rest.items] == [
+        item.id for item in full.items if item.id not in {s.id for s in subset.items}
+    ]
+
+
 def test_routing_benchmark_references_are_checkable_answers() -> None:
     dataset = load_dataset("evaluations/datasets/routing-benchmark.jsonl")
     referenced = [item for item in dataset.items if item.reference is not None]
