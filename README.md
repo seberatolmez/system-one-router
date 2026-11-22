@@ -210,7 +210,8 @@ uv run python -m system_one.evaluation.replay --dataset evaluations/datasets/rou
   8 of the 60 items have exact-match references. The judge prompt does not yet
   guard against instructions embedded in a response (for example "reply PASS"),
   and the judge's verdicts were not audited by a human. Exact-match grading was
-  spot-checked on the 8 reference items and agreed with the raw answers.
+  spot-checked against raw answers for the fast and balanced tiers (all 8
+  reference items) and the reasoning tier (4 of 8), and agreed.
 - **Replay, not live.** Router latency is the decision latency plus the chosen
   tier's measured latency, not a live end-to-end call. Answers are identical
   across routers by construction.
