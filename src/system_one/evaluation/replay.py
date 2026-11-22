@@ -121,6 +121,14 @@ def replay_router(
                 decision_confidence=decision.decision_confidence if decision else None,
                 decision_source=decision.decision_source if decision else None,
                 decision_cost=decision_cost,
+                decision_complexity=decision.decision_complexity if decision else None,
+                decision_task_type=decision.decision_task_type if decision else None,
+                decision_quality_requirement=(
+                    decision.decision_quality_requirement if decision else None
+                ),
+                decision_latency_requirement=(
+                    decision.decision_latency_requirement if decision else None
+                ),
                 error_type=(decision.error_type if decision else None) or answer.error_type,
             )
         )
@@ -150,10 +158,10 @@ def _replayed_tier(
     if decision.decision_complexity is None or decision.decision_confidence is None:
         return decision.tier or fallback_tier
     recorded = Decision(
-        task_type="recorded",
+        task_type=decision.decision_task_type or "recorded",
         complexity=decision.decision_complexity,
-        quality_requirement=3.0,
-        latency_requirement=3.0,
+        quality_requirement=decision.decision_quality_requirement or 3.0,
+        latency_requirement=decision.decision_latency_requirement or 3.0,
         confidence=decision.decision_confidence,
     )
     return policy.evaluate(recorded).tier

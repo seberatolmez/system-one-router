@@ -101,6 +101,18 @@ async def test_decision_strategy_reports_tier_confidence_and_cost() -> None:
     assert outcome.model_selected is None
 
 
+async def test_decision_strategy_records_every_routing_signal() -> None:
+    decision = _decision(task_type="summarization", complexity=2.0, quality_requirement=4.5)
+    strategy = DecisionStrategy("m/one", StubEngine(decision), _policy())
+
+    outcome = await strategy.run(EvaluationItem("a", (), "fast"))
+
+    assert outcome.decision_complexity == 2.0
+    assert outcome.decision_task_type == "summarization"
+    assert outcome.decision_quality_requirement == 4.5
+    assert outcome.decision_latency_requirement == 3.0
+
+
 async def test_decision_strategy_counts_fallback_as_error_without_tier() -> None:
     fallback = _decision(
         confidence=0.0,
@@ -115,6 +127,9 @@ async def test_decision_strategy_counts_fallback_as_error_without_tier() -> None
     assert outcome.tier is None
     assert outcome.decision_confidence is None
     assert outcome.error_type == "decision_engine_timeout"
+    assert outcome.decision_task_type is None
+    assert outcome.decision_quality_requirement is None
+    assert outcome.decision_latency_requirement is None
 
 
 def test_under_routing_rate_counts_only_lower_than_expected_tiers() -> None:
