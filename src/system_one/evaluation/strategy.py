@@ -1,6 +1,7 @@
 """Strategy contract and adapter for the existing routing orchestrator."""
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, fields
 from time import perf_counter
 from typing import Protocol
 
@@ -41,6 +42,12 @@ class StrategyOutcome:
     response_text: str | None = None
     quality_passed: bool | None = None
     decision_complexity: float | None = None
+
+
+def outcome_from_record(record: Mapping[str, object]) -> StrategyOutcome:
+    """Rebuild an outcome from its serialized form, ignoring fields this version lacks."""
+    names = {field.name for field in fields(StrategyOutcome)}
+    return StrategyOutcome(**{key: value for key, value in record.items() if key in names})  # type: ignore[arg-type]
 
 
 class BenchmarkStrategy(Protocol):

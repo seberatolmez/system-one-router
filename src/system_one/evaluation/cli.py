@@ -9,7 +9,7 @@ from pathlib import Path
 import httpx
 
 from system_one.core.config import Settings, get_settings
-from system_one.evaluation.dataset import load_dataset
+from system_one.evaluation.dataset import load_dataset, resolve_in_workspace
 from system_one.evaluation.grading import ReferenceOrJudgeGrader
 from system_one.evaluation.metrics import DECISION_METRICS, DEFAULT_METRICS
 from system_one.evaluation.reporting import write_reports
@@ -103,12 +103,19 @@ async def _run(args: argparse.Namespace) -> tuple[Path, Path]:
     strategies: Sequence[BenchmarkStrategy]
     if args.decision_model:
         strategies = build_decision_strategies(args.decision_model, settings)
-        result = await run_benchmark(dataset, strategies, DECISION_METRICS)
+        result = await run_benchmark(
+            dataset, strategies, DECISION_METRICS, checkpoint=args.checkpoint
+        )
     else:
         strategies = build_live_strategies(args.strategy, settings)
         grader = build_grader(settings, args.judge_model)
-        result = await run_benchmark(dataset, strategies, DEFAULT_METRICS, grader)
-    return write_reports(result, args.output_dir)
+        result = await run_benchmark(
+            dataset, strategies, DEFAULT_METRICS, grader, checkpoint=args.checkpoint
+        )
+    paths = write_reports(result, args.output_dir)
+    if args.checkpoint is not None:
+        resolve_in_workspace(args.checkpoint).unlink(missing_ok=True)
+    return paths
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -144,6 +151,15 @@ def main(argv: Sequence[str] | None = None) -> None:
         help=(
             "decision-model slug to benchmark on routing decisions only, e.g. "
             "typesafe/jev-1.14; repeat this option. Cannot be combined with --strategy."
+        ),
+    )
+    parser.add_argument(
+        "--checkpoint",
+        type=Path,
+        help=(
+            "JSONL file that records each finished item; rerun with the same file to "
+            "resume an interrupted run (errored items are retried). It is deleted when "
+            "the reports are written."
         ),
     )
     parser.add_argument(
