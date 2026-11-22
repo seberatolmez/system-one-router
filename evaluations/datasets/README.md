@@ -11,13 +11,19 @@ Six-item smoke-test dataset. Not a benchmark.
 
 | Part | Items | Source | License |
 | --- | --- | --- | --- |
-| coding, summarization, analysis, translation, easy question answering | 220 | hand-written for this repository | MIT |
+| coding, summarization, analysis, translation, easy question answering | 260 | written for this repository, drafted with an LLM assistant | MIT |
 | medium/hard question answering (GSM8K) | 20 | [openai/gsm8k](https://huggingface.co/datasets/openai/gsm8k) test split | MIT |
 | medium/hard question answering (MMLU-Pro) | 20 | [TIGER-Lab/MMLU-Pro](https://huggingface.co/datasets/TIGER-Lab/MMLU-Pro) test split | MIT |
 
 Each record carries `source` and `license`. The 40 public items also carry a
 `reference` answer (a number for GSM8K, an option letter for MMLU-Pro) for
 exact-match scoring.
+
+Public items were not sampled at random: they are the first matching rows of
+each split. GSM8K items are picked by solution length (3-4 steps = medium, 6 or
+more = hard); MMLU-Pro items by subject (business, economics, health,
+psychology, history and other = medium; physics, chemistry, engineering and
+law = hard). Difficulty here is a prior, not a measurement.
 
 **`expected_tier` is provisional.** It is derived from `difficulty`
 (`easy`=fast, `medium`=balanced, `hard`=reasoning) and is a prior, not a
