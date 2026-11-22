@@ -41,7 +41,8 @@ async def _grade(
         return replace(outcome, quality_passed=False) if outcome.error_type is not None else outcome
     try:
         passed = await grader.grade(item, outcome.response_text)
-    except Exception:
+    except Exception as error:
+        _logger.warning("grading %s failed, leaving it unmeasured: %r", item.id, error)
         passed = None
     return replace(outcome, quality_passed=passed)
 

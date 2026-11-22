@@ -80,8 +80,22 @@ def load_dataset(path: str | Path) -> EvaluationDataset:
     return EvaluationDataset(name=dataset_path.stem, items=tuple(items))
 
 
+def resolve_in_workspace(path: str | Path) -> Path:
+    """Resolve ``path`` and require it to lie inside the current working directory.
+
+    Evaluation commands take file paths from the command line, which may be
+    supplied by an automated agent; this keeps them from reading or writing
+    outside the project checkout.
+    """
+    resolved = Path(path).resolve()
+    if not resolved.is_relative_to(Path.cwd().resolve()):
+        raise ValueError(f"'{path}' is outside the working directory")
+    return resolved
+
+
 def write_dataset(dataset: EvaluationDataset, path: str | Path) -> None:
     """Write a dataset as JSONL that ``load_dataset`` reads back unchanged."""
+    target = resolve_in_workspace(path)
     lines = []
     for item in dataset.items:
         record: dict[str, object] = {
@@ -96,7 +110,7 @@ def write_dataset(dataset: EvaluationDataset, path: str | Path) -> None:
         }
         present = {key: value for key, value in record.items() if value is not None}
         lines.append(json.dumps(present, ensure_ascii=False))
-    Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    target.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
 
 def _parse_item(document: object, path: Path, line_number: int) -> EvaluationItem:
