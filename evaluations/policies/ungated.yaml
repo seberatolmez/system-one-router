@@ -1,0 +1,14 @@
+# Evaluation-only policy: the balanced.yaml complexity ranges with no confidence gate.
+# It shows each decision model's raw routing signal; it is not a recommended runtime policy.
+policy:
+  confidence_threshold: 0.0
+  tiers:
+    fast:
+      min_complexity: 1.0
+      max_complexity: 2.5
+    balanced:
+      min_complexity: 2.5
+      max_complexity: 4.5
+    reasoning:
+      min_complexity: 4.5
+      max_complexity: 5.0

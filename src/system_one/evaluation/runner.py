@@ -107,6 +107,17 @@ async def run_benchmark(
             if grader is not None:
                 outcome = await _grade(grader, item, outcome)
             outcomes.append(replace(outcome, response_text=None))
+            _logger.info(
+                "%s %d/%d %s tier=%s %.0fms error=%s passed=%s",
+                strategy.name,
+                len(outcomes),
+                len(dataset.items),
+                item.id,
+                outcome.tier,
+                (perf_counter() - started_at) * 1000,
+                outcome.error_type,
+                outcome.quality_passed,
+            )
 
         immutable_outcomes = tuple(outcomes)
         metric_results = tuple(

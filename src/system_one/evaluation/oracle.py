@@ -40,18 +40,25 @@ async def measure_expected_tiers(
         {outcome.item_id: outcome.quality_passed for outcome in strategy.outcomes}
         for strategy in result.strategies
     ]
-    relabeled = []
-    for item in dataset.items:
-        label: RoutingTier | None = None
-        for tier, tier_verdicts in zip(_TIERS, verdicts, strict=True):
-            verdict = tier_verdicts[item.id]
-            if verdict is None:
-                break
-            if verdict:
-                label = tier
-                break
-        relabeled.append(replace(item, expected_tier=label))
-    return EvaluationDataset(name=dataset.name, items=tuple(relabeled))
+    relabeled = tuple(
+        replace(item, expected_tier=cheapest_passing_tier([v[item.id] for v in verdicts]))
+        for item in dataset.items
+    )
+    return EvaluationDataset(name=dataset.name, items=relabeled)
+
+
+def cheapest_passing_tier(verdicts: Sequence[bool | None]) -> RoutingTier | None:
+    """Given fast/balanced/reasoning verdicts in order, return the cheapest that passed.
+
+    Stops at the first ungraded tier: a cheaper tier that might have passed must
+    not be skipped, so the label is left unknown instead.
+    """
+    for tier, verdict in zip(_TIERS, verdicts, strict=True):
+        if verdict is None:
+            return None
+        if verdict:
+            return tier
+    return None
 
 
 def main(argv: Sequence[str] | None = None) -> None:

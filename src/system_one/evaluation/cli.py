@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -168,6 +169,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         if len(args.strategy) != len(set(args.strategy)):
             parser.error("--strategy values must be unique")
 
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     json_path, markdown_path = asyncio.run(_run(args))
     print(f"Wrote JSON results: {json_path}")
     print(f"Wrote Markdown summary: {markdown_path}")

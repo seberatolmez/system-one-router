@@ -1,5 +1,7 @@
 """Tests for gateway API-key authentication."""
 
+from pathlib import Path
+
 import pytest
 from fastapi import HTTPException
 
@@ -10,8 +12,10 @@ from system_one.core.config import get_settings
 @pytest.mark.asyncio
 async def test_authentication_is_disabled_without_configured_key(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.delenv("SYSTEM_ONE_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)  # a developer's local .env must not configure a key here
     get_settings.cache_clear()
 
     await require_api_key()
