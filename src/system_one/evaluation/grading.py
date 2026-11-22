@@ -14,7 +14,7 @@ from system_one.providers.base import LLMProvider
 
 _NUMBER = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
 _LETTER_ONLY = re.compile(r"\W*([A-J])\W*")
-_LETTER_AFTER_ANSWER = re.compile(r"(?i:answer)\s*(?:is|:)?\s*\W*([A-J])\b")
+_LETTER_AFTER_ANSWER = re.compile(r"(?i:answer)(?:\s+is)?\W{0,5}([A-J])\b")
 
 _JUDGE_INSTRUCTIONS = (
     "You are a strict grader. Decide whether the RESPONSE correctly and completely "

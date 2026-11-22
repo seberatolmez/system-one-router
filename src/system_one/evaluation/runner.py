@@ -1,5 +1,6 @@
 """Run a dataset through the same set of strategies and collect comparable results."""
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -9,6 +10,8 @@ from system_one.evaluation.dataset import EvaluationDataset, EvaluationItem
 from system_one.evaluation.grading import QualityGrader
 from system_one.evaluation.metrics import DEFAULT_METRICS, EvaluationMetric, MetricResult
 from system_one.evaluation.strategy import BenchmarkStrategy, StrategyOutcome
+
+_logger = logging.getLogger("system_one.evaluation")
 
 
 @dataclass(frozen=True)
@@ -38,7 +41,8 @@ async def _grade(
         return replace(outcome, quality_passed=False) if outcome.error_type is not None else outcome
     try:
         passed = await grader.grade(item, outcome.response_text)
-    except Exception:
+    except Exception as error:
+        _logger.warning("grading %s failed, leaving it unmeasured: %r", item.id, error)
         passed = None
     return replace(outcome, quality_passed=passed)
 
