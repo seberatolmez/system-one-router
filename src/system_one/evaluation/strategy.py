@@ -38,6 +38,8 @@ class StrategyOutcome:
     error_type: str | None
     decision_source: str | None = None
     decision_cost: float | None = None
+    response_text: str | None = None
+    quality_passed: bool | None = None
 
 
 class BenchmarkStrategy(Protocol):
@@ -149,6 +151,7 @@ class OrchestratorStrategy:
             error_type=error_type,
             decision_source=_decision_source(routed_outcome.decision),
             decision_cost=_decision_cost(routed_outcome.decision),
+            response_text=extract_response_text(response.body) if error_type is None else None,
         )
 
 
@@ -189,6 +192,16 @@ class DecisionStrategy:
             decision_source=decision.decision_source,
             decision_cost=decision.cost,
         )
+
+
+def extract_response_text(body: dict[str, object]) -> str | None:
+    """Return the first choice's message text, or None when the shape is unexpected."""
+    choices = body.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return None
+    message = choices[0].get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    return content if isinstance(content, str) else None
 
 
 def _decision_source(decision: Decision | None) -> str | None:

@@ -67,11 +67,35 @@ uv run python -m system_one.evaluation.cli --dataset evaluations/datasets/sample
 ```
 
 Available strategies are `system-one/auto`, `system-one/fast`,
-`system-one/balanced`, and `system-one/reasoning`. The runner records routing
+`system-one/balanced`, `system-one/reasoning`, and `heuristic` (a keyword and
+prompt-length baseline with no model call). The runner records routing
 accuracy against optional `expected_tier` labels, measured cost, latency,
-error rate, and escalation rate. Missing token usage or pricing is left
-unmeasured rather than reported as zero. Quality scoring and benchmark claims
-are intentionally not included in this framework milestone.
+error rate, escalation rate, quality pass rate, and cost per successful task.
+Missing token usage or pricing is left unmeasured rather than reported as zero.
+
+### Quality scoring
+
+Answers are graded pass/fail. Items with a `reference` answer (a number or an
+option letter) are matched exactly; other items are graded by the chat model
+given with `--judge-model`, and stay ungraded without one. A request that
+errored counts as failed. Responses are discarded after grading, so reports
+hold verdicts only. The judge model is not free: its calls are not included in
+a strategy's cost.
+
+```text
+uv run python -m system_one.evaluation.cli --dataset evaluations/datasets/routing-benchmark.jsonl --strategy system-one/reasoning --strategy system-one/fast --strategy heuristic --strategy system-one/auto --judge-model <chat-model-slug>
+```
+
+`evaluations/datasets/routing-benchmark.jsonl` ships with provisional
+`expected_tier` labels derived from difficulty (see
+`evaluations/datasets/README.md`). To replace them with measured labels (the
+cheapest tier whose answer passes grading), run all three tiers once:
+
+```text
+uv run python -m system_one.evaluation.oracle --dataset evaluations/datasets/routing-benchmark.jsonl --output evaluations/datasets/routing-benchmark.measured.jsonl --judge-model <chat-model-slug>
+```
+
+An item stays unlabeled when no tier passes or a cheaper tier could not be graded.
 
 ### Comparing decision models
 
