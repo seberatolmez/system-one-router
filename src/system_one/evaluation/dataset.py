@@ -9,9 +9,11 @@ from typing import cast
 from system_one.domain.completions import CompletionMessage
 from system_one.domain.decision import RoutingTier
 
-_ALLOWED_ITEM_KEYS = {"id", "messages", "expected_tier"}
+_METADATA_KEYS = ("task_type", "source", "license", "reference")
+_ALLOWED_ITEM_KEYS = {"id", "messages", "expected_tier", "difficulty", *_METADATA_KEYS}
 _ALLOWED_MESSAGE_KEYS = {"role", "content"}
 _VALID_TIERS = {"fast", "balanced", "reasoning"}
+_VALID_DIFFICULTIES = {"easy", "medium", "hard"}
 
 
 class DatasetFormatError(ValueError):
@@ -20,11 +22,19 @@ class DatasetFormatError(ValueError):
 
 @dataclass(frozen=True)
 class EvaluationItem:
-    """One request and its optional evaluation-only expected tier label."""
+    """One request, its optional expected tier label, and optional provenance metadata.
+
+    ``reference`` is a short checkable answer used for exact-match quality scoring.
+    """
 
     id: str
     messages: tuple[CompletionMessage, ...]
     expected_tier: RoutingTier | None
+    task_type: str | None = None
+    difficulty: str | None = None
+    source: str | None = None
+    license: str | None = None
+    reference: str | None = None
 
 
 @dataclass(frozen=True)
@@ -102,10 +112,24 @@ def _parse_item(document: object, path: Path, line_number: int) -> EvaluationIte
         )
     expected_tier = cast(RoutingTier, raw_tier) if raw_tier is not None else None
 
+    metadata: dict[str, str | None] = {}
+    for key in _METADATA_KEYS:
+        value = record.get(key)
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise _invalid_item(path, line_number, f"'{key}' must be a non-empty string or null")
+        metadata[key] = value
+    difficulty = record.get("difficulty")
+    if difficulty is not None and difficulty not in _VALID_DIFFICULTIES:
+        raise _invalid_item(
+            path, line_number, "'difficulty' must be 'easy', 'medium', 'hard', or null"
+        )
+
     return EvaluationItem(
         id=item_id,
         messages=messages,
         expected_tier=expected_tier,
+        difficulty=difficulty,
+        **metadata,
     )
 
 
