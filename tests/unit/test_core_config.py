@@ -1,5 +1,7 @@
 """Tests for environment-backed settings."""
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -49,13 +51,15 @@ def test_jev_timeout_must_be_positive() -> None:
         Settings(jev_timeout_seconds=0)
 
 
-def test_policy_file_setting_defaults_to_balanced_policy(
+def test_policy_file_setting_defaults_to_balanced_only_policy(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
+    monkeypatch.chdir(tmp_path)  # a developer's local .env must not set the policy here
     for name in POLICY_ENV_NAMES:
         monkeypatch.delenv(name, raising=False)
 
-    assert Settings().policy_file == "policies/balanced.yaml"
+    assert Settings().policy_file == "policies/balanced-only.yaml"
 
 
 @pytest.mark.parametrize("env_name", POLICY_ENV_NAMES)

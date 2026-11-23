@@ -35,7 +35,10 @@ class PolicyConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_tiers(self) -> "PolicyConfig":
-        """Require all supported tiers to partition the full complexity scale."""
+        """Require all supported tiers to partition the full complexity scale.
+
+        A range with equal bounds is empty and disables that tier.
+        """
         configured_tiers = set(self.tiers)
         expected_tiers = set(_TIER_ORDER)
         if configured_tiers != expected_tiers:
@@ -56,9 +59,9 @@ class PolicyConfig(BaseModel):
                     f"tier '{tier}' must start at {expected_minimum}; ranges must be "
                     "contiguous and non-overlapping"
                 )
-            if complexity_range.min_complexity >= complexity_range.max_complexity:
+            if complexity_range.min_complexity > complexity_range.max_complexity:
                 raise ValueError(
-                    f"tier '{tier}' min_complexity must be less than max_complexity"
+                    f"tier '{tier}' min_complexity must not exceed max_complexity"
                 )
             expected_minimum = complexity_range.max_complexity
 

@@ -104,6 +104,49 @@ def test_repository_balanced_policy_loads() -> None:
     assert policy.fallback_tier == "balanced"
 
 
+@pytest.mark.parametrize("complexity", [1.0, 1.4, 2.5, 3.0, 4.5, 4.99, 5.0])
+@pytest.mark.parametrize("confidence", [0.0, 0.5, 1.0])
+def test_repository_balanced_only_policy_routes_everything_to_balanced(
+    complexity: float, confidence: float
+) -> None:
+    policy_file = Path(__file__).parents[2] / "policies" / "balanced-only.yaml"
+    engine = DeterministicPolicyEngine(load_policy_config(policy_file))
+
+    assert engine.evaluate(_decision(complexity, confidence)).tier == "balanced"
+
+
+_EMPTY_FAST_POLICY = _BALANCED_POLICY.replace(
+    "max_complexity: 2.5", "max_complexity: 1.0", 1
+).replace("min_complexity: 2.5", "min_complexity: 1.0")
+
+
+@pytest.mark.parametrize(
+    ("complexity", "expected_tier"),
+    [(1.0, "balanced"), (2.0, "balanced"), (4.5, "reasoning"), (5.0, "reasoning")],
+)
+def test_a_range_with_equal_bounds_disables_that_tier(
+    tmp_path: Path, complexity: float, expected_tier: str
+) -> None:
+    engine = _load_text(tmp_path, _EMPTY_FAST_POLICY)
+
+    assert engine.evaluate(_decision(complexity)).tier == expected_tier
+
+
+def test_an_empty_top_tier_does_not_claim_the_maximum_complexity(tmp_path: Path) -> None:
+    contents = _BALANCED_POLICY.replace("max_complexity: 4.5", "max_complexity: 5.0").replace(
+        "min_complexity: 4.5", "min_complexity: 5.0"
+    )
+
+    assert _load_text(tmp_path, contents).evaluate(_decision(5.0)).tier == "balanced"
+
+
+def test_a_range_whose_minimum_exceeds_its_maximum_is_rejected(tmp_path: Path) -> None:
+    contents = _BALANCED_POLICY.replace("max_complexity: 4.5", "max_complexity: 2.4")
+
+    with pytest.raises(PolicyConfigurationError, match="must not exceed"):
+        _load_text(tmp_path, contents)
+
+
 def test_missing_policy_file_fails_clearly(tmp_path: Path) -> None:
     with pytest.raises(PolicyConfigurationError, match="Policy file not found"):
         load_policy_config(tmp_path / "missing.yaml")
@@ -121,9 +164,7 @@ def test_missing_policy_file_fails_clearly(tmp_path: Path) -> None:
             "confidence_threshold",
         ),
         (
-            _BALANCED_POLICY.replace(
-                "  tiers:", "  fallback_tier: unsupported\n  tiers:"
-            ),
+            _BALANCED_POLICY.replace("  tiers:", "  fallback_tier: unsupported\n  tiers:"),
             "fallback_tier",
         ),
         (
@@ -167,9 +208,7 @@ def test_missing_policy_file_fails_clearly(tmp_path: Path) -> None:
         ),
     ],
 )
-def test_invalid_policy_config_fails_clearly(
-    tmp_path: Path, contents: str, message: str
-) -> None:
+def test_invalid_policy_config_fails_clearly(tmp_path: Path, contents: str, message: str) -> None:
     policy_file = tmp_path / "invalid.yaml"
     policy_file.write_text(contents, encoding="utf-8")
 

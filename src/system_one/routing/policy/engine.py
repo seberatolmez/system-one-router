@@ -32,6 +32,7 @@ class DeterministicPolicyEngine:
                 return RoutingResult(tier=tier)
             if (
                 complexity_range.max_complexity == 5.0
+                and complexity_range.min_complexity < 5.0
                 and decision.complexity == 5.0
             ):
                 return RoutingResult(tier=tier)
