@@ -187,7 +187,11 @@ async def test_decision_models_are_benchmarked_through_the_jev_contract() -> Non
 
     strategies = build_decision_strategies(
         ("good/model", "broken/model"),
-        Settings(openrouter_api_key="key", jev_base_url="https://openrouter.test/api/alpha"),
+        Settings(
+            openrouter_api_key="key",
+            jev_base_url="https://openrouter.test/api/alpha",
+            policy_file="policies/balanced.yaml",
+        ),
         httpx.MockTransport(handler),
     )
     dataset = EvaluationDataset(
