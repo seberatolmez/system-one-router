@@ -1,0 +1,201 @@
+{
+  "settings": {
+    "seed": 20261122,
+    "test_fraction": 0.35,
+    "train_margin": 0.03,
+    "margin": 0.05,
+    "min_saving": 0.1,
+    "train_size": 195,
+    "test_size": 105
+  },
+  "results": [
+    {
+      "model": "typesafe/jev-1.14",
+      "policy": {
+        "fast_below": 1.0,
+        "confidence_gate": 0.0
+      },
+      "train_baseline": {
+        "n": 128,
+        "quality": 0.9296875,
+        "cost_per_success": 0.0033476134453781507,
+        "fast_share": 0.0
+      },
+      "train_router": {
+        "n": 128,
+        "quality": 0.9296875,
+        "cost_per_success": 0.0033830625042016813,
+        "fast_share": 0.0
+      },
+      "comparison": {
+        "router": {
+          "n": 71,
+          "quality": 0.9859154929577465,
+          "cost_per_success": 0.003324857571428571,
+          "fast_share": 0.0
+        },
+        "baseline": {
+          "n": 71,
+          "quality": 0.9859154929577465,
+          "cost_per_success": 0.0032920285714285714,
+          "fast_share": 0.0
+        },
+        "quality_difference": 0.0,
+        "quality_difference_ci": [
+          0.0,
+          0.0
+        ],
+        "cost_change": 0.00997227067982398,
+        "cost_change_ci": [
+          0.007204872227990489,
+          0.015245204384203292
+        ],
+        "wins": false
+      },
+      "excluded": 101,
+      "train_items": 128,
+      "test_items": 71
+    },
+    {
+      "model": "google/gemini-decision-1",
+      "policy": {
+        "fast_below": 1.0,
+        "confidence_gate": 0.0
+      },
+      "train_baseline": {
+        "n": 128,
+        "quality": 0.9296875,
+        "cost_per_success": 0.0033476134453781507,
+        "fast_share": 0.0
+      },
+      "train_router": {
+        "n": 128,
+        "quality": 0.9296875,
+        "cost_per_success": 0.0034092554621848745,
+        "fast_share": 0.0
+      },
+      "comparison": {
+        "router": {
+          "n": 71,
+          "quality": 0.9859154929577465,
+          "cost_per_success": 0.0033486842857142858,
+          "fast_share": 0.0
+        },
+        "baseline": {
+          "n": 71,
+          "quality": 0.9859154929577465,
+          "cost_per_success": 0.0032920285714285714,
+          "fast_share": 0.0
+        },
+        "quality_difference": 0.0,
+        "quality_difference_ci": [
+          0.0,
+          0.0
+        ],
+        "cost_change": 0.017209970404700625,
+        "cost_change_ci": [
+          0.012414142282597185,
+          0.026367243772754678
+        ],
+        "wins": false
+      },
+      "excluded": 101,
+      "train_items": 128,
+      "test_items": 71
+    },
+    {
+      "model": "microsoft/microsoft-decision-1.1",
+      "policy": {
+        "fast_below": 1.0,
+        "confidence_gate": 0.0
+      },
+      "train_baseline": {
+        "n": 128,
+        "quality": 0.9296875,
+        "cost_per_success": 0.0033476134453781507,
+        "fast_share": 0.0
+      },
+      "train_router": {
+        "n": 128,
+        "quality": 0.9296875,
+        "cost_per_success": 0.003366196857142856,
+        "fast_share": 0.0
+      },
+      "comparison": {
+        "router": {
+          "n": 71,
+          "quality": 0.9859154929577465,
+          "cost_per_success": 0.003309050571428572,
+          "fast_share": 0.0
+        },
+        "baseline": {
+          "n": 71,
+          "quality": 0.9859154929577465,
+          "cost_per_success": 0.0032920285714285714,
+          "fast_share": 0.0
+        },
+        "quality_difference": 0.0,
+        "quality_difference_ci": [
+          0.0,
+          0.0
+        ],
+        "cost_change": 0.005170672012914546,
+        "cost_change_ci": [
+          0.003706983694876209,
+          0.007948332134757097
+        ],
+        "wins": false
+      },
+      "excluded": 101,
+      "train_items": 128,
+      "test_items": 71
+    },
+    {
+      "model": "openai/gpt-6-luna-decisions",
+      "policy": {
+        "fast_below": 1.0,
+        "confidence_gate": 0.0
+      },
+      "train_baseline": {
+        "n": 128,
+        "quality": 0.9296875,
+        "cost_per_success": 0.0033476134453781507,
+        "fast_share": 0.0
+      },
+      "train_router": {
+        "n": 128,
+        "quality": 0.9296875,
+        "cost_per_success": 0.0034268915966386556,
+        "fast_share": 0.0
+      },
+      "comparison": {
+        "router": {
+          "n": 71,
+          "quality": 0.9859154929577465,
+          "cost_per_success": 0.0033654871428571423,
+          "fast_share": 0.0
+        },
+        "baseline": {
+          "n": 71,
+          "quality": 0.9859154929577465,
+          "cost_per_success": 0.0032920285714285714,
+          "fast_share": 0.0
+        },
+        "quality_difference": 0.0,
+        "quality_difference_ci": [
+          0.0,
+          0.0
+        ],
+        "cost_change": 0.022314074691245356,
+        "cost_change_ci": [
+          0.01614105273346156,
+          0.03411167001378712
+        ],
+        "wins": false
+      },
+      "excluded": 101,
+      "train_items": 128,
+      "test_items": 71
+    }
+  ]
+}
