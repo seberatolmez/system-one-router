@@ -16,7 +16,7 @@ import argparse
 import asyncio
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import fields, replace
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -37,7 +37,7 @@ from system_one.evaluation.metrics import (
 from system_one.evaluation.oracle import cheapest_passing_tier
 from system_one.evaluation.reporting import write_reports
 from system_one.evaluation.runner import BenchmarkResult, StrategyResult
-from system_one.evaluation.strategy import StrategyOutcome
+from system_one.evaluation.strategy import StrategyOutcome, outcome_from_record
 from system_one.routing.decision.heuristic import HeuristicDecisionEngine
 from system_one.routing.policy import DeterministicPolicyEngine, load_policy_config
 
@@ -65,12 +65,9 @@ Outcomes = dict[str, dict[str, StrategyOutcome]]
 def load_outcomes(path: str | Path) -> Outcomes:
     """Read a report JSON into ``{strategy: {item_id: outcome}}``."""
     document = json.loads(resolve_in_workspace(path).read_text(encoding="utf-8"))
-    names = {field.name for field in fields(StrategyOutcome)}
     return {
         strategy["name"]: {
-            outcome["item_id"]: StrategyOutcome(
-                **{key: value for key, value in outcome.items() if key in names}
-            )
+            outcome["item_id"]: outcome_from_record(outcome)
             for outcome in strategy["outcomes"]
         }
         for strategy in document["strategies"]
