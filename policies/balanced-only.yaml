@@ -1,0 +1,20 @@
+# Default policy: every request routed through system-one/auto uses the balanced tier.
+#
+# Measured on the project's benchmark, no fast/balanced/reasoning split beat always
+# using the balanced model (see "Benchmarks" in the README), so the fast and reasoning
+# tiers are disabled here: a range with equal bounds is empty. Jev decisions are still
+# recorded in receipts. To route again, use policies/balanced.yaml or calibrate your own
+# with `python -m system_one.evaluation.calibration`.
+policy:
+  confidence_threshold: 0.0
+  fallback_tier: balanced
+  tiers:
+    fast:
+      min_complexity: 1.0
+      max_complexity: 1.0
+    balanced:
+      min_complexity: 1.0
+      max_complexity: 5.0
+    reasoning:
+      min_complexity: 5.0
+      max_complexity: 5.0

@@ -69,7 +69,7 @@ class Settings(BaseSettings):
         ),
     )
     policy_file: str = Field(
-        default="policies/balanced.yaml",
+        default="policies/balanced-only.yaml",
         min_length=1,
         validation_alias=AliasChoices("POLICY_FILE", "SYSTEM_ONE_POLICY_FILE"),
     )

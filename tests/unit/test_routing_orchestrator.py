@@ -2,6 +2,7 @@
 
 import pytest
 
+from system_one.core.config import Settings
 from system_one.domain.completions import (
     CompletionMessage,
     CompletionRequest,
@@ -111,6 +112,37 @@ def make_request(model: str) -> CompletionRequest:
         messages=(CompletionMessage(role="user", content="Route this for me."),),
         options={"temperature": 0.2},
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("complexity", [1.0, 3.0, 5.0])
+async def test_default_policy_sends_even_a_confident_decision_to_balanced(
+    complexity: float, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in ("POLICY_FILE", "SYSTEM_ONE_POLICY_FILE"):
+        monkeypatch.delenv(name, raising=False)
+    default_policy = Settings(_env_file=None).policy_file  # type: ignore[call-arg]
+    decision = Decision(
+        task_type="coding",
+        complexity=complexity,
+        quality_requirement=3.0,
+        latency_requirement=3.0,
+        confidence=1.0,
+        decision_source="jev",
+    )
+    provider = RecordingProvider()
+    orchestrator = RoutingOrchestrator(
+        decision_engine=FakeDecisionEngine(decision),
+        policy_engine=DeterministicPolicyEngine(load_policy_config(default_policy)),
+        model_registry=ModelRegistry(make_profiles()),
+        provider=provider,
+    )
+
+    outcome = await orchestrator.route(make_request("system-one/auto"))
+
+    assert default_policy == "policies/balanced-only.yaml"
+    assert outcome.tier == "balanced"
+    assert [request.model for request in provider.chats] == ["vendor/balanced-primary"]
 
 
 @pytest.mark.asyncio
