@@ -228,6 +228,30 @@ async def test_replay_reroutes_recorded_decisions_with_the_given_policy() -> Non
     assert tiers_of(ungated_result) == ["reasoning"] * 3
 
 
+async def test_replay_carries_the_recorded_routing_signals_onto_router_outcomes() -> None:
+    decisions = {
+        "m": {
+            item_id: _outcome(
+                "m",
+                item_id,
+                tier="balanced",
+                decision_complexity=3.0,
+                decision_confidence=0.9,
+                decision_task_type="coding",
+                decision_quality_requirement=4.0,
+                decision_latency_requirement=2.0,
+            )
+            for item_id in VERDICTS
+        }
+    }
+
+    result = await replay(_dataset(), _tiers(), decisions, _policy(), "balanced")
+
+    outcome = next(s for s in result.strategies if s.name == "m").outcomes[0]
+    assert (outcome.decision_task_type, outcome.decision_quality_requirement) == ("coding", 4.0)
+    assert (outcome.decision_complexity, outcome.decision_latency_requirement) == (3.0, 2.0)
+
+
 def test_ungated_evaluation_policy_loads() -> None:
     from system_one.routing.policy import load_policy_config
 

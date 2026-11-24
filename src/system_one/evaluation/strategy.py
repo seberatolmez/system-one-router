@@ -42,6 +42,9 @@ class StrategyOutcome:
     response_text: str | None = None
     quality_passed: bool | None = None
     decision_complexity: float | None = None
+    decision_task_type: str | None = None
+    decision_quality_requirement: float | None = None
+    decision_latency_requirement: float | None = None
 
 
 def outcome_from_record(record: Mapping[str, object]) -> StrategyOutcome:
@@ -200,6 +203,9 @@ class DecisionStrategy:
             decision_source=decision.decision_source,
             decision_cost=decision.cost,
             decision_complexity=None if failed else decision.complexity,
+            decision_task_type=None if failed else decision.task_type,
+            decision_quality_requirement=None if failed else decision.quality_requirement,
+            decision_latency_requirement=None if failed else decision.latency_requirement,
         )
 
 
